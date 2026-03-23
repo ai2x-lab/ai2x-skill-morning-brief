@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v15
+Daily Podcast Generator v16
 AI-powered morning briefing skill for OpenClaw agents.
 
 Creator: Microsense Vision Co., Ltd. | Allan@msviso.com
@@ -46,22 +46,19 @@ AI_PROVIDERS = {
         "name": "OpenAI",
         "model": "gpt-4o-mini",
         "endpoint": "https://api.openai.com/v1/chat/completions",
-        "key_path": ["models", "providers", "openai", "apiKey"],
+        "auth_type": "bearer",
     },
     "minimax": {
         "name": "MiniMax",
         "model": "MiniMax-M2.1",
         "endpoint": "https://api.minimax.chat/v1/text/chatcompletion_v2",
-        "key_path": ["models", "providers", "minimax", "apiKey"],
-        "header_name": "Authorization",
-        "header_prefix": "Bearer ",
+        "auth_type": "bearer",
     },
     "anthropic": {
         "name": "Anthropic",
         "model": "claude-3-haiku-20240307",
         "endpoint": "https://api.anthropic.com/v1/messages",
-        "key_path": ["models", "providers", "anthropic", "apiKey"],
-        "header_name": "x-api-key",
+        "auth_type": "anthropic",
     },
 }
 
@@ -75,7 +72,8 @@ def load_config():
         "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
         "news_count": 2,
         "sources": ["gnews", "newsdata", "bbc"],
-        "ai_provider": "auto",  # auto, openai, minimax, anthropic
+        "ai_provider": "openai",
+        "ai_api_key": "YOUR_AI_API_KEY",
         "gnews_api_key": "YOUR_GNEWS_API_KEY",
         "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
         "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
@@ -171,49 +169,19 @@ def weathercode_to_description(code):
     }
     return weather_map.get(code, "多雲")
 
-# ==== 取得 AI API Key ====
-def get_ai_key(provider_name):
-    try:
-        with open(os.path.expanduser("~/.openclaw/openclaw.json"), "r") as f:
-            config_oc = json.load(f)
-        
-        if provider_name == "auto":
-            # 嘗試找第一個可用的 provider
-            for pname in ["openai", "minimax", "anthropic"]:
-                key = get_key_from_config(config_oc, AI_PROVIDERS[pname]["key_path"])
-                if key:
-                    return pname, AI_PROVIDERS[pname], key
-            return None, None, None
-        
-        provider = AI_PROVIDERS.get(provider_name)
-        if not provider:
-            return None, None, None
-        
-        key = get_key_from_config(config_oc, provider["key_path"])
-        return provider_name, provider, key
-        
-    except Exception as e:
-        print(f"  ⚠️ 無法讀取 OpenClaw 設定: {e}", file=sys.stderr)
-        return None, None, None
-
-def get_key_from_config(config, key_path):
-    current = config
-    for k in key_path:
-        if isinstance(current, dict):
-            current = current.get(k)
-        else:
-            return None
-    return current if current else None
-
 # ==== AI 翻譯 ====
 def translate_to_chinese(text):
     if not text or len(text) < 5:
         return text
     
-    provider_name, provider, api_key = get_ai_key(config.get("ai_provider", "auto"))
-    if not api_key:
-        print(f"  ⚠️ 無可用 AI provider，跳過翻譯", file=sys.stderr)
+    api_key = config.get("ai_api_key", "")
+    provider_name = config.get("ai_provider", "openai")
+    
+    if not api_key or api_key == "YOUR_AI_API_KEY":
+        print(f"  ⚠️ 未設定 AI API Key，跳過翻譯", file=sys.stderr)
         return text
+    
+    provider = AI_PROVIDERS.get(provider_name, AI_PROVIDERS["openai"])
     
     prompt = f"""請將以下英文新聞翻譯成繁體中文，保持新聞風格。
 
@@ -228,47 +196,36 @@ def translate_to_chinese(text):
 中文翻譯："""
     
     try:
-        if provider_name == "anthropic":
-            # Anthropic 格式不同
-            resp = requests.post(
-                provider["endpoint"],
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                },
-                json={
-                    "model": provider["model"],
-                    "max_tokens": 800,
-                    "messages": [{"role": "user", "content": prompt}]
-                },
-                timeout=30
-            )
-            if resp.ok:
-                return resp.json()["content"][0]["text"].strip()
-        else:
-            # OpenAI / MiniMax 格式
-            header_name = provider.get("header_name", "Authorization")
-            header_prefix = provider.get("header_prefix", "Bearer ")
-            
-            resp = requests.post(
-                provider["endpoint"],
-                headers={header_name: f"{header_prefix}{api_key}", "content-type": "application/json"},
-                json={
-                    "model": provider["model"],
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 800
-                },
-                timeout=30
-            )
-            if resp.ok:
-                result = resp.json()
-                # MiniMax 和 OpenAI 回傳格式略有不同
-                if "choices" in result:
-                    return result["choices"][0]["message"]["content"].strip()
-                elif "choices" in result:
-                    return result.get("choices", [{}])[0].get("message", {}).get("content", "")
+        headers = {"Content-Type": "application/json"}
         
+        if provider["auth_type"] == "bearer":
+            headers["Authorization"] = f"Bearer {api_key}"
+        elif provider["auth_type"] == "anthropic":
+            headers["x-api-key"] = api_key
+            headers["anthropic-version"] = "2023-06-01"
+        
+        if provider["auth_type"] == "anthropic":
+            payload = {
+                "model": provider["model"],
+                "max_tokens": 800,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+        else:
+            payload = {
+                "model": provider["model"],
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 800
+            }
+        
+        resp = requests.post(provider["endpoint"], headers=headers, json=payload, timeout=30)
+        
+        if resp.ok:
+            result = resp.json()
+            if provider["auth_type"] == "anthropic":
+                return result["content"][0]["text"].strip()
+            else:
+                return result["choices"][0]["message"]["content"].strip()
+                
     except Exception as e:
         print(f"  ⚠️ AI 翻譯錯誤: {e}", file=sys.stderr)
     
@@ -276,10 +233,14 @@ def translate_to_chinese(text):
 
 # ==== AI 潤飾（TTS 友善版）====
 def polish_script(draft):
-    provider_name, provider, api_key = get_ai_key(config.get("ai_provider", "auto"))
-    if not api_key:
-        print(f"  ⚠️ 無可用 AI provider，跳過潤飾", file=sys.stderr)
+    api_key = config.get("ai_api_key", "")
+    provider_name = config.get("ai_provider", "openai")
+    
+    if not api_key or api_key == "YOUR_AI_API_KEY":
+        print(f"  ⚠️ 未設定 AI API Key，跳過潤飾", file=sys.stderr)
         return draft
+    
+    provider = AI_PROVIDERS.get(provider_name, AI_PROVIDERS["openai"])
     
     polish_instructions = """
 你是一位貼心的私人助理，正在為你的主人準備晨間新聞摘要。
@@ -307,47 +268,39 @@ def polish_script(draft):
     try:
         print(f"  ✨ AI 潤飾中...", file=sys.stderr)
         
-        if provider_name == "anthropic":
-            resp = requests.post(
-                provider["endpoint"],
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                },
-                json={
-                    "model": provider["model"],
-                    "max_tokens": 2500,
-                    "messages": [{"role": "user", "content": polish_instructions}]
-                },
-                timeout=60
-            )
-            if resp.ok:
-                result = resp.json()["content"][0]["text"].strip()
-                result = clean_for_tts(result)
-                print(f"  ✅ 潤飾完成 ({provider['name']})", file=sys.stderr)
-                return result
+        headers = {"Content-Type": "application/json"}
+        
+        if provider["auth_type"] == "bearer":
+            headers["Authorization"] = f"Bearer {api_key}"
+        elif provider["auth_type"] == "anthropic":
+            headers["x-api-key"] = api_key
+            headers["anthropic-version"] = "2023-06-01"
+        
+        if provider["auth_type"] == "anthropic":
+            payload = {
+                "model": provider["model"],
+                "max_tokens": 2500,
+                "messages": [{"role": "user", "content": polish_instructions}]
+            }
         else:
-            header_name = provider.get("header_name", "Authorization")
-            header_prefix = provider.get("header_prefix", "Bearer ")
+            payload = {
+                "model": provider["model"],
+                "messages": [{"role": "user", "content": polish_instructions}],
+                "max_tokens": 2500
+            }
+        
+        resp = requests.post(provider["endpoint"], headers=headers, json=payload, timeout=60)
+        
+        if resp.ok:
+            result = resp.json()
+            if provider["auth_type"] == "anthropic":
+                result = result["content"][0]["text"].strip()
+            else:
+                result = result["choices"][0]["message"]["content"].strip()
             
-            resp = requests.post(
-                provider["endpoint"],
-                headers={header_name: f"{header_prefix}{api_key}", "content-type": "application/json"},
-                json={
-                    "model": provider["model"],
-                    "messages": [{"role": "user", "content": polish_instructions}],
-                    "max_tokens": 2500
-                },
-                timeout=60
-            )
-            if resp.ok:
-                result = resp.json()
-                if "choices" in result:
-                    result = result["choices"][0]["message"]["content"].strip()
-                result = clean_for_tts(result)
-                print(f"  ✅ 潤飾完成 ({provider['name']})", file=sys.stderr)
-                return result
+            result = clean_for_tts(result)
+            print(f"  ✅ 潤飾完成 ({provider['name']})", file=sys.stderr)
+            return result
                 
     except Exception as e:
         print(f"  ⚠️ AI 潤飾錯誤: {e}", file=sys.stderr)
@@ -603,7 +556,7 @@ def generate_voice(script):
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v15 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v16 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
     
     script = generate_script()

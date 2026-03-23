@@ -194,3 +194,36 @@ tail -f ~/clawd/podcast/daily.log
   "ai_provider": "minimax"
 }
 ```
+
+## AI Provider 設定
+
+### 設定方式
+
+在 `config.json` 中填入你的 AI API Key：
+
+```json
+{
+  "ai_provider": "openai",
+  "ai_api_key": "你的AI_API_KEY"
+}
+```
+
+### 支援的 Provider
+
+| Provider | ai_provider 值 | 說明 |
+|----------|---------------|------|
+| OpenAI | `openai` | GPT-4o-mini，預設 |
+| MiniMax | `minimax` | MiniMax-M2.1 |
+| Anthropic | `anthropic` | Claude 3 Haiku |
+
+### 申請 AI API Key
+
+| 服務 | 申請連結 |
+|------|----------|
+| OpenAI | https://platform.openai.com/api-keys |
+| MiniMax | https://platform.minimax.chat/ |
+| Anthropic | https://console.anthropic.com/ |
+
+### 為什麼要使用者自己填？
+
+安全考量：AI API Key 由使用者自己保管，不會被自動化腳本自動讀取。
