@@ -129,3 +129,21 @@
   ]
 }
 ```
+
+## 天氣來源
+
+使用 **wttr.in**（免費、不需要 API Key）：
+- URL: `https://wttr.in`
+- 完全免費，不需要申請
+- 支援全球城市
+
+設定方式：
+```json
+{
+  "location": "Taipei,Taiwan"
+}
+```
+
+支援格式：
+- 城市：`"Taipei"`
+- 城市,國家：`"Xindian,Taiwan"`

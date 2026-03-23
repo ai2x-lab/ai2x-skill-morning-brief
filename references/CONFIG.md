@@ -149,3 +149,15 @@ tail -f ~/clawd/podcast/daily.log
 | 語音太長 | 減少 `news_count` 或 `topics` 數量 |
 | 無法發送 Telegram | 檢查 `telegram_bot_token` 和 `telegram_chat_id` |
 | 新聞重複 | 只使用其中一個 `sources` |
+
+## 天氣
+
+使用 **wttr.in**（免費、不需要 API Key）。
+
+設定位置：`location` 欄位。
+
+```json
+{
+  "location": "Taipei,Taiwan"
+}
+```
