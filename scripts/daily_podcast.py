@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v13 - 晨間語音早報
-- GNews API + NewsData.io + BBC RSS（備用）
+Daily Podcast Generator v14b - 晨間語音早報
+- GNews API + NewsData.io + BBC RSS
+- Open-Meteo 天氣（更準確）
 - TTS 友善版本
 """
 import requests
@@ -20,6 +21,22 @@ PODCAST_DIR = Path("/home/ubuntu/clawd/podcast")
 MEDIA_DIR = Path("/home/ubuntu/.openclaw/media")
 MEMORY_DIR = Path("/home/ubuntu/clawd/memory")
 EDGE_TTS = "node /home/ubuntu/.npm-global/lib/node_modules/openclaw/node_modules/node-edge-tts/bin.js"
+
+# ==== Open-Meteo 城市座標 ====
+CITY_COORDS = {
+    "台北": {"lat": 25.0330, "lon": 121.5654},
+    "Taipei": {"lat": 25.0330, "lon": 121.5654},
+    "新店": {"lat": 24.9673, "lon": 121.5416},
+    "Xindian": {"lat": 24.9673, "lon": 121.5416},
+    "台中": {"lat": 24.1477, "lon": 120.6736},
+    "Taichung": {"lat": 24.1477, "lon": 120.6736},
+    "高雄": {"lat": 22.6273, "lon": 120.3014},
+    "Kaohsiung": {"lat": 22.6273, "lon": 120.3014},
+    "香港": {"lat": 22.3193, "lon": 114.1694},
+    "Hong Kong": {"lat": 22.3193, "lon": 114.1694},
+    "東京": {"lat": 35.6762, "lon": 139.6503},
+    "Tokyo": {"lat": 35.6762, "lon": 139.6503},
+}
 
 # ==== 載入設定 ====
 def load_config():
@@ -68,23 +85,87 @@ def send_to_telegram(mp3_file, caption=""):
     else:
         print(f"  ❌ Telegram 錯誤: {resp.text[:200]}", file=sys.stderr)
 
-# ==== 天氣 ====
+# ==== 天氣（Open-Meteo）====
 def get_weather(location=None):
+    """
+    使用 Open-Meteo API（免費、不需要 API Key）
+    https://open-meteo.com/
+    """
     loc = location or config.get("location", "Xindian,Taiwan")
+    
+    # 解析地點
+    city = loc.split(",")[0].strip()
+    coords = CITY_COORDS.get(city)
+    
+    if not coords:
+        coords = {"lat": 24.9673, "lon": 121.5416}
+        print(f"  ⚠️ 未知地點 {city}，使用預設新店", file=sys.stderr)
+    
     try:
-        url = f"https://wttr.in/{loc.replace(',', ',')}?format=j1"
-        resp = requests.get(url, timeout=10)
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": coords["lat"],
+            "longitude": coords["lon"],
+            "current_weather": True,
+            "hourly": "relativehumidity_2m",
+            "timezone": "Asia/Taipei"
+        }
+        resp = requests.get(url, params=params, timeout=10)
         data = resp.json()
-        curr = data.get("current_condition", [{}])[0]
-        temp = curr.get("temp_C", "?")
-        desc = curr.get("weatherDesc", [{}])[0].get("value", "未知")
-        feels = curr.get("FeelsLikeC", "?")
-        humidity = curr.get("humidity", "?")
-        wind = curr.get("windspeedKmph", "?")
-        return f"{temp}度，{desc}，體感{feels}度，濕度{humidity}%，風速{wind}公里"
+        
+        current = data.get("current_weather", {})
+        temp = float(current.get("temperature", 0))
+        windspeed = float(current.get("windspeed", 0))
+        weathercode = int(current.get("weathercode", 0))
+        
+        # 解析天氣代碼
+        weather_desc = weathercode_to_description(weathercode)
+        
+        # 取得濕度
+        hourly = data.get("hourly", {})
+        humidity_data = hourly.get("relativehumidity_2m", []) if hourly else []
+        humidity = humidity_data[0] if humidity_data else None
+        
+        # 四捨五入
+        temp_rounded = round(temp)
+        windspeed_rounded = round(windspeed)
+        
+        result = f"{temp_rounded}度，{weather_desc}，風速{windspeed_rounded}公里"
+        if humidity is not None:
+            result += f"，濕度{round(humidity)}%"
+        
+        return result
+        
     except Exception as e:
-        print(f"Weather error: {e}", file=sys.stderr)
+        print(f"  ⚠️ 天氣取得失敗: {e}", file=sys.stderr)
         return "天氣資訊取得失敗"
+
+def weathercode_to_description(code):
+    """將 Open-Meteo 天氣碼轉換成中文描述"""
+    weather_map = {
+        0: "晴",
+        1: "晴時多雲",
+        2: "多雲",
+        3: "陰天",
+        45: "有霧",
+        48: "霧凇",
+        51: "小毛毛雨",
+        53: "中毛毛雨",
+        55: "大毛毛雨",
+        61: "小雨",
+        63: "中雨",
+        65: "大雨",
+        71: "小雪",
+        73: "中雪",
+        75: "大雪",
+        80: "陣雨",
+        81: "中陣雨",
+        82: "大陣雨",
+        95: "雷暴",
+        96: "雷暴伴小冰雹",
+        99: "雷暴伴大冰雹",
+    }
+    return weather_map.get(code, "多雲")
 
 # ==== OpenAI API Key ====
 def get_openai_key():
@@ -257,19 +338,12 @@ def fetch_newsdata(category, query, max_results=None):
 
 # ==== BBC RSS 抓取 ====
 def fetch_bbc_rss(category, max_results=None):
-    """
-    BBC RSS - 免費，不需要 API Key
-    但只有標題和描述，沒有完整內容
-    建議作為備用來源或特定分類使用
-    """
     count = max_results or config.get("news_count", 2)
     
-    # BBC RSS URL 對應
     bbc_feeds = {
         "國際": "https://feeds.bbci.co.uk/news/world/rss.xml",
         "科技": "https://feeds.bbci.co.uk/news/technology/rss.xml",
         "經濟": "https://feeds.bbci.co.uk/news/business/rss.xml",
-        "軍事": "https://feeds.bbci.co.uk/news/world/rss.xml",  # BBC 軍事新聞在 world
     }
     
     rss_url = bbc_feeds.get(category)
@@ -302,11 +376,8 @@ def fetch_bbc_rss(category, max_results=None):
 
 # ==== 解析 RSS ====
 def parse_rss_items(xml_text):
-    """簡單解析 RSS XML"""
     import re
     items = []
-    
-    # 匹配 item 區塊
     item_pattern = re.compile(r'<item>(.*?)</item>', re.DOTALL)
     items_xml = item_pattern.findall(xml_text)
     
@@ -376,7 +447,6 @@ def generate_script():
         
         items = []
         
-        # 按順序嘗試各來源
         if "gnews" in sources:
             items = fetch_gnews(category, query)
         
@@ -435,7 +505,7 @@ def generate_voice(script):
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v13 (GNews + NewsData + BBC RSS) - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v14b (Open-Meteo 天氣) - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
     
     script = generate_script()
