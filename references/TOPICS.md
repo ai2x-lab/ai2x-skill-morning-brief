@@ -132,8 +132,8 @@
 
 ## 天氣來源
 
-使用 **wttr.in**（免費、不需要 API Key）：
-- URL: `https://wttr.in`
+使用 **Open-Meteo**（免費、不需要 API Key）：
+- URL: `https://open-meteo.com`
 - 完全免費，不需要申請
 - 支援全球城市
 
