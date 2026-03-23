@@ -161,3 +161,36 @@ tail -f ~/clawd/podcast/daily.log
   "location": "Taipei,Taiwan"
 }
 ```
+
+## AI Provider 設定
+
+此腳本支援多種 AI API Provider，會自動讀取 `~/.openclaw/openclaw.json` 中的設定。
+
+### ai_provider 選項
+
+| 值 | 說明 |
+|----|------|
+| `auto` | 自動偵測（優先順序：OpenAI > MiniMax > Anthropic）|
+| `openai` | 強制使用 OpenAI |
+| `minimax` | 強制使用 MiniMax |
+| `anthropic` | 強制使用 Anthropic Claude |
+
+### 預設行為
+
+設為 `auto` 時，腳本會自動找第一個有設定 API Key 的 Provider。
+
+### 支援的 Provider
+
+| Provider | Model | 說明 |
+|----------|-------|------|
+| OpenAI | gpt-4o-mini | 預設翻譯與潤飾 |
+| MiniMax | MiniMax-M2.1 | 適合中文 |
+| Anthropic | claude-3-haiku | Claude 方案 |
+
+### 設定範例
+
+```json
+{
+  "ai_provider": "minimax"
+}
+```
