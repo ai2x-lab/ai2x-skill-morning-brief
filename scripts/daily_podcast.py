@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v14b - 晨間語音早報
-- GNews API + NewsData.io + BBC RSS
-- Open-Meteo 天氣（更準確）
-- TTS 友善版本
+Daily Podcast Generator v14b
+AI-powered morning briefing skill for OpenClaw agents.
+
+Creator: Microsense Vision Co., Ltd.
+Contact: Allan@msviso.com
+License: MIT
+
+https://github.com/ai2x-lab/ai2x-skill-morning-brief
 """
 import requests
 import os
@@ -87,13 +91,7 @@ def send_to_telegram(mp3_file, caption=""):
 
 # ==== 天氣（Open-Meteo）====
 def get_weather(location=None):
-    """
-    使用 Open-Meteo API（免費、不需要 API Key）
-    https://open-meteo.com/
-    """
     loc = location or config.get("location", "Xindian,Taiwan")
-    
-    # 解析地點
     city = loc.split(",")[0].strip()
     coords = CITY_COORDS.get(city)
     
@@ -118,15 +116,12 @@ def get_weather(location=None):
         windspeed = float(current.get("windspeed", 0))
         weathercode = int(current.get("weathercode", 0))
         
-        # 解析天氣代碼
         weather_desc = weathercode_to_description(weathercode)
         
-        # 取得濕度
         hourly = data.get("hourly", {})
         humidity_data = hourly.get("relativehumidity_2m", []) if hourly else []
         humidity = humidity_data[0] if humidity_data else None
         
-        # 四捨五入
         temp_rounded = round(temp)
         windspeed_rounded = round(windspeed)
         
@@ -141,29 +136,14 @@ def get_weather(location=None):
         return "天氣資訊取得失敗"
 
 def weathercode_to_description(code):
-    """將 Open-Meteo 天氣碼轉換成中文描述"""
     weather_map = {
-        0: "晴",
-        1: "晴時多雲",
-        2: "多雲",
-        3: "陰天",
-        45: "有霧",
-        48: "霧凇",
-        51: "小毛毛雨",
-        53: "中毛毛雨",
-        55: "大毛毛雨",
-        61: "小雨",
-        63: "中雨",
-        65: "大雨",
-        71: "小雪",
-        73: "中雪",
-        75: "大雪",
-        80: "陣雨",
-        81: "中陣雨",
-        82: "大陣雨",
-        95: "雷暴",
-        96: "雷暴伴小冰雹",
-        99: "雷暴伴大冰雹",
+        0: "晴", 1: "晴時多雲", 2: "多雲", 3: "陰天",
+        45: "有霧", 48: "霧凇",
+        51: "小毛毛雨", 53: "中毛毛雨", 55: "大毛毛雨",
+        61: "小雨", 63: "中雨", 65: "大雨",
+        71: "小雪", 73: "中雪", 75: "大雪",
+        80: "陣雨", 81: "中陣雨", 82: "大陣雨",
+        95: "雷暴", 96: "雷暴伴小冰雹", 99: "雷暴伴大冰雹",
     }
     return weather_map.get(code, "多雲")
 
@@ -506,6 +486,7 @@ def generate_voice(script):
 def main():
     print("=" * 50, file=sys.stderr)
     print(f"🎙️ 每日早報 v14b (Open-Meteo 天氣) - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print("  技能開發：Microsense Vision Co., Ltd. | Allan@msviso.com", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
     
     script = generate_script()
