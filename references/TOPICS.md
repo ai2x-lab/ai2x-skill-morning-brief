@@ -1,6 +1,62 @@
 # 主題範例指南
 
-## 熱門主題關鍵字
+## 新聞來源說明
+
+| 來源 | 需要 API Key | 內容品質 | 說明 |
+|------|-------------|----------|------|
+| **GNews** | ✅ 需要 | ⭐⭐⭐ | 有 3000+ 字摘要內容 |
+| **NewsData** | ✅ 需要 | ⭐⭐ | 只有描述，付費才有全文 |
+| **BBC RSS** | ❌ 不需要 | ⭐⭐⭐ | 免費，標題+描述，無需申請 |
+
+### 測試經驗（2026-03 實測）
+
+**GNews API**：
+- 有 `content` 欄位，最多 3965 字
+- 經 AI 潤飾後內容豐富
+- 免費額度 100次/天
+- 12小時延遲（付費可移除）
+
+**NewsData.io**：
+- 免費版 `content` 欄位顯示「ONLY AVAILABLE IN PAID PLANS」
+- 只有 `description` 可用（約 100-150 字）
+- 適合當備用來源
+
+**BBC RSS**：
+- 完全免費，不需要 API Key
+- RSS URL 直接可用
+- 描述欄位比 Google News RSS 豐富
+- 建議作為「國際」或「英國/歐洲」新聞的備用來源
+
+## sources 設定
+
+```json
+{
+  "sources": ["gnews", "newsdata", "bbc"]
+}
+```
+
+順序代表優先順序：
+1. `gnews` - 主要來源（內容最完整）
+2. `newsdata` - GNews 失敗時的備用
+3. `bbc` - 最後備用（免費但內容較少）
+
+如只用 BBC RSS：
+```json
+{
+  "sources": ["bbc"]
+}
+```
+
+## BBC RSS URL 對照
+
+| 分類 | RSS URL |
+|------|---------|
+| 國際 | `https://feeds.bbci.co.uk/news/world/rss.xml` |
+| 科技 | `https://feeds.bbci.co.uk/news/technology/rss.xml` |
+| 經濟 | `https://feeds.bbci.co.uk/news/business/rss.xml` |
+| 英國 | `https://feeds.bbci.co.uk/news/uk/rss.xml` |
+
+## 主題關鍵字
 
 ### 新聞類
 | 分類 | 關鍵字 | 說明 |
@@ -16,7 +72,6 @@
 | 軍事 | `military war` | 軍事戰爭 |
 | 軍事 | `defense technology` | 國防科技 |
 | 能源 | `oil energy` | 石油能源 |
-| 能源 | `renewable energy solar` | 綠能太陽能 |
 | 政治 | `US politics` | 美國政治 |
 | 政治 | `China Taiwan` | 中國台灣 |
 
@@ -25,46 +80,18 @@
 |------|--------|
 | NBA | `NBA Lakers` |
 | NBA | `NBA Warriors Curry` |
-| NBA | `NBA Celtics` |
-| NBA | `NBA Finals` |
 | 籃球 | `basketball` |
 | 足球 | `Premier League soccer` |
-| 足球 | `Messi OR Ronaldo` |
 | 網球 | `tennis Grand Slam` |
-| 高爾夫 | `PGA golf` |
-| MLB | `MLB baseball Yankees` |
 
 ### 藝術文化類
 | 分類 | 關鍵字 |
 |------|--------|
 | 藝術 | `art exhibition museum` |
-| 藝術 | `contemporary art` |
 | 電影 | `Hollywood movie` |
-| 電影 | `Oscar awards` |
 | 音樂 | `music concert` |
 | 設計 | `design architecture` |
-| 時尚 | `fashion week` |
-| 攝影 | `photography exhibition` |
-| 書籍 | `book bestseller` |
 | 遊戲 | `video game esports` |
-
-### 商業類
-| 分類 | 關鍵字 |
-|------|--------|
-| 創業 | `startup funding` |
-| 投資 | `investment Warren Buffett` |
-| 房地產 | `real estate housing` |
-| 電商 | `e-commerce Amazon` |
-| 品牌 | `luxury brand fashion` |
-
-### 科學健康類
-| 分類 | 關鍵字 |
-|------|--------|
-| 健康 | `health medical research` |
-| 減重 | `weight loss obesity` |
-| AI 健康 | `AI healthcare medicine` |
-| 太空 | `space NASA SpaceX` |
-| 氣候 | `climate change environment` |
 
 ## 主題設定範例
 
@@ -90,45 +117,15 @@
 ]
 ```
 
-### 藝術愛好者
+### 只用 BBC（完全免費方案）
 ```json
-[
-  ["藝術展覽", "art exhibition museum"],
-  ["電影新片", "Hollywood movie release"],
-  ["音樂巡演", "music concert tour"],
-  ["設計建築", "architecture design"],
-  ["時尚週", "fashion week runway"]
-]
-```
-
-### 商務人士
-```json
-[
-  ["美股市場", "US stock market Dow Jones"],
-  ["全球經濟", "global economy trade"],
-  ["加密貨幣", "bitcoin cryptocurrency"],
-  ["科技投資", "tech investment funding"],
-  ["能源價格", "oil prices energy"]
-]
-```
-
-## 多關鍵字搜尋
-
-使用 `OR` 組合關鍵字：
-```
-"Apple OR Google OR Microsoft"
-"Lakers OR Warriors OR Celtics"
-"bitcoin OR ethereum OR crypto"
-```
-
-使用 `-` 排除：
-```
-"AI technology -crypto"
-"movie -horror"
-```
-
-使用引號精確匹配：
-```
-"Stock market"
-"Climate change"
+{
+  "sources": ["bbc"],
+  "topics": [
+    ["國際", "world"],
+    ["英國", "uk"],
+    ["科技", "technology"],
+    ["經濟", "business"]
+  ]
+}
 ```

@@ -9,7 +9,7 @@
   ],
   "news_count": 2,
   "voice_max_duration": 300,
-  "sources": ["gnews", "newsdata"],
+  "sources": ["gnews", "newsdata", "bbc"],
   "gnews_api_key": "YOUR_GNEWS_API_KEY",
   "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
   "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v12 - 晨間語音早報
-- TTS 友善版本（無特殊符號）
+Daily Podcast Generator v13 - 晨間語音早報
+- GNews API + NewsData.io + BBC RSS（備用）
+- TTS 友善版本
 """
 import requests
 import os
@@ -29,7 +30,7 @@ def load_config():
         "location": "Xindian,Taiwan",
         "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
         "news_count": 2,
-        "sources": ["gnews", "newsdata"],
+        "sources": ["gnews", "newsdata", "bbc"],
         "gnews_api_key": "YOUR_GNEWS_API_KEY",
         "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
         "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
@@ -54,7 +55,6 @@ def save_headlines_for_agent(headlines, date_str):
     with open(filename, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"  📋 標題已存档: {filename}", file=sys.stderr)
-    return filename
 
 # ==== Telegram ====
 def send_to_telegram(mp3_file, caption=""):
@@ -155,10 +155,6 @@ def polish_script(draft):
 4. 每則新聞濃縮成 2-3 句重點精華
 5. 保持資訊準確
 
-【舉例】
-- 好：早安，希望你今天有個愉快的開始
-- 不好：早安！希望你今天有個愉快的開始～
-
 初稿：
 """ + draft
 
@@ -181,14 +177,9 @@ def polish_script(draft):
 
 # ==== TTS 文字清理 ====
 def clean_for_tts(text):
-    """清理文字，移除 TTS 會唸錯的符號"""
-    # 移除所有特殊符號（保留中文和基本英數）
     text = re.sub(r'[^\w\s\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\n。，！？、；：""''（）【】《》]', '', text)
-    # 移除多餘空白
     text = re.sub(r'\s+', ' ', text)
-    # 移除行首行尾空白
-    text = text.strip()
-    return text
+    return text.strip()
 
 # ==== GNews 搜尋 ====
 def fetch_gnews(category, query, max_results=None):
@@ -264,6 +255,77 @@ def fetch_newsdata(category, query, max_results=None):
         print(f"    ❌ NewsData 錯誤: {e}", file=sys.stderr)
         return []
 
+# ==== BBC RSS 抓取 ====
+def fetch_bbc_rss(category, max_results=None):
+    """
+    BBC RSS - 免費，不需要 API Key
+    但只有標題和描述，沒有完整內容
+    建議作為備用來源或特定分類使用
+    """
+    count = max_results or config.get("news_count", 2)
+    
+    # BBC RSS URL 對應
+    bbc_feeds = {
+        "國際": "https://feeds.bbci.co.uk/news/world/rss.xml",
+        "科技": "https://feeds.bbci.co.uk/news/technology/rss.xml",
+        "經濟": "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "軍事": "https://feeds.bbci.co.uk/news/world/rss.xml",  # BBC 軍事新聞在 world
+    }
+    
+    rss_url = bbc_feeds.get(category)
+    if not rss_url:
+        print(f"  ⚠️ BBC - {category} 無對應 feed", file=sys.stderr)
+        return []
+    
+    print(f"  🔍 BBC RSS - {category}", file=sys.stderr)
+    try:
+        resp = requests.get(rss_url, timeout=15)
+        items = parse_rss_items(resp.text)
+        
+        results = []
+        for item in items[:count]:
+            title = item.get("title", "")
+            description = item.get("description", "")
+            if title:
+                results.append({
+                    "title": title,
+                    "content": description or "BBC 新聞",
+                    "source": "BBC News",
+                    "source_name": "BBC"
+                })
+        
+        print(f"    ✅ BBC 取得 {len(results)} 則", file=sys.stderr)
+        return results
+    except Exception as e:
+        print(f"    ❌ BBC RSS 錯誤: {e}", file=sys.stderr)
+        return []
+
+# ==== 解析 RSS ====
+def parse_rss_items(xml_text):
+    """簡單解析 RSS XML"""
+    import re
+    items = []
+    
+    # 匹配 item 區塊
+    item_pattern = re.compile(r'<item>(.*?)</item>', re.DOTALL)
+    items_xml = item_pattern.findall(xml_text)
+    
+    for item_xml in items_xml:
+        title = re.search(r'<title><!\[CDATA\[(.*?)\]\]></title>', item_xml)
+        if not title:
+            title = re.search(r'<title>(.*?)</title>', item_xml)
+        
+        desc = re.search(r'<description><!\[CDATA\[(.*?)\]\]></description>', item_xml)
+        if not desc:
+            desc = re.search(r'<description>(.*?)</description>', item_xml)
+        
+        items.append({
+            "title": title.group(1) if title else "",
+            "description": desc.group(1) if desc else ""
+        })
+    
+    return items
+
 # ==== 格式化新聞初稿 ====
 def format_news_draft(news_items, category):
     if not news_items:
@@ -306,13 +368,23 @@ def generate_script():
     
     all_headlines = []
     news_count = 0
+    sources = config.get("sources", ["gnews"])
+    
     for category, query in topics:
         if news_count >= 10:
             break
         
-        items = fetch_gnews(category, query)
-        if not items and "newsdata" in config.get("sources", []):
+        items = []
+        
+        # 按順序嘗試各來源
+        if "gnews" in sources:
+            items = fetch_gnews(category, query)
+        
+        if not items and "newsdata" in sources:
             items = fetch_newsdata(category, query)
+        
+        if not items and "bbc" in sources:
+            items = fetch_bbc_rss(category)
         
         if items:
             formatted = format_news_draft(items, category)
@@ -363,7 +435,7 @@ def generate_voice(script):
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v12 (TTS 友善版) - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v13 (GNews + NewsData + BBC RSS) - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
     
     script = generate_script()
