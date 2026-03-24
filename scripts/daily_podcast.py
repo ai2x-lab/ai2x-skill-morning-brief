@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v17
+Daily Podcast Generator v17.2
 AI-powered morning briefing skill for OpenClaw agents.
 
 Creator: Microsense Vision Co., Ltd. | Allan@msviso.com
@@ -203,6 +203,11 @@ def load_openclaw_gateway_config():
 
 def call_ai_model(prompt, max_tokens=800):
     provider_name = config.get("ai_provider", "auto")
+
+    # Quick hint for common misconfiguration
+    api_key = (config.get("ai_api_key", "") or "").strip()
+    if provider_name in ("minimax", "openai", "anthropic") and (not api_key or api_key == "YOUR_AI_API_KEY"):
+        print(f"  ⚠️ {provider_name} 模式未設定 ai_api_key", file=sys.stderr)
 
     # Build candidate chain
     if provider_name == "auto":
@@ -606,9 +611,17 @@ def generate_voice(script):
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v17 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v17.2 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
-    
+
+    # startup diagnostics
+    provider = config.get("ai_provider", "auto")
+    api_key = (config.get("ai_api_key", "") or "").strip()
+    key_set = bool(api_key and api_key != "YOUR_AI_API_KEY")
+    print(f"  🤖 AI provider: {provider}", file=sys.stderr)
+    if provider != "openclaw_local" and not key_set:
+        print("  ⚠️ 未設定 ai_api_key：翻譯與潤飾可能不可用（除非 local gateway 可用）", file=sys.stderr)
+
     script = generate_script()
     mp3_file = generate_voice(script)
     
