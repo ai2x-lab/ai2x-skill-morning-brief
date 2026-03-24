@@ -90,6 +90,7 @@ def load_config():
         "ai_api_key": "",
         "gnews_api_key": "YOUR_GNEWS_API_KEY",
         "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
+        "delivery_mode": "none",
         "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
         "telegram_chat_id": "YOUR_TELEGRAM_CHAT_ID"
     }
@@ -102,6 +103,7 @@ config.setdefault("ai_fallback_providers", ["openclaw_local", "minimax", "openai
 config.setdefault("ai_model", "openai/gpt-4o-mini")
 if config.get("ai_api_key") == "YOUR_AI_API_KEY":
     config["ai_api_key"] = ""
+config.setdefault("delivery_mode", "none")
 
 # ==== 儲存標題存档 ====
 def save_headlines_for_agent(headlines, date_str):
@@ -122,18 +124,26 @@ def save_headlines_for_agent(headlines, date_str):
 
 # ==== Telegram ====
 def send_to_telegram(mp3_file, caption=""):
-    url = f"https://api.telegram.org/bot{config['telegram_bot_token']}/sendAudio"
+    token = config.get("telegram_bot_token", "")
+    chat_id = config.get("telegram_chat_id", "")
+    if not token or token == "YOUR_TELEGRAM_BOT_TOKEN" or not chat_id or chat_id == "YOUR_TELEGRAM_CHAT_ID":
+        print("  ⚠️ Telegram 未設定，略過傳送", file=sys.stderr)
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/sendAudio"
     with open(mp3_file, "rb") as f:
         files = {"audio": f}
-        data = {"chat_id": config["telegram_chat_id"], "caption": caption}
+        data = {"chat_id": chat_id, "caption": caption}
         resp = requests.post(url, files=files, data=data, timeout=60)
     if resp.ok:
         print(f"  ✅ 已發送到 Telegram", file=sys.stderr)
-    else:
-        msg = resp.text[:200]
-        print(f"  ❌ Telegram 錯誤: {msg}", file=sys.stderr)
-        if "chat not found" in msg.lower():
-            print("  💡 請先讓使用者在 Telegram 主動對 Bot 發送 /start（或任一訊息）以啟用 chat。", file=sys.stderr)
+        return True
+
+    msg = resp.text[:200]
+    print(f"  ❌ Telegram 錯誤: {msg}", file=sys.stderr)
+    if "chat not found" in msg.lower():
+        print("  💡 請先讓使用者在 Telegram 主動對 Bot 發送 /start（或任一訊息）以啟用 chat。", file=sys.stderr)
+    return False
 
 # ==== 天氣（Open-Meteo）====
 def get_weather(location=None):
@@ -665,24 +675,35 @@ def generate_voice(script):
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v17.3 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v17.4 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
     # startup diagnostics
     provider = config.get("ai_provider", "auto")
     api_key = (config.get("ai_api_key", "") or "").strip()
     key_set = bool(api_key and api_key != "YOUR_AI_API_KEY")
+    delivery_mode = config.get("delivery_mode", "none")
     print(f"  🤖 AI provider: {provider}", file=sys.stderr)
+    print(f"  📦 delivery_mode: {delivery_mode}", file=sys.stderr)
     if provider != "openclaw_local" and not key_set:
         print("  ⚠️ 未設定 ai_api_key：翻譯與潤飾可能不可用（除非 local gateway 可用）", file=sys.stderr)
 
     script = generate_script()
     mp3_file = generate_voice(script)
-    
+
     if mp3_file:
         caption = f"🎙️ {datetime.now().strftime('%Y/%m/%d')} 晨間摘要"
-        send_to_telegram(mp3_file, caption)
-        print(f"  ✅ 完成!", file=sys.stderr)
+        delivered = False
+
+        if delivery_mode == "telegram":
+            delivered = send_to_telegram(mp3_file, caption)
+        elif delivery_mode == "stdout":
+            print(f"AUDIO_FILE={mp3_file}")
+            delivered = True
+        else:
+            print("  ℹ️ delivery_mode=none：僅產生檔案，不主動推播", file=sys.stderr)
+
+        print(f"  ✅ 完成! delivered={delivered}", file=sys.stderr)
     else:
         print("  ❌ 失敗", file=sys.stderr)
         sys.exit(1)
