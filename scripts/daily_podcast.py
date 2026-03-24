@@ -78,7 +78,8 @@ def load_config():
         "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
         "news_count": 2,
         "sources": ["gnews", "newsdata", "bbc"],
-        "ai_provider": "openclaw_local",
+        "ai_provider": "auto",
+        "ai_fallback_providers": ["openclaw_local", "minimax", "openai", "anthropic"],
         "ai_model": "openai/gpt-4o-mini",
         "ai_api_key": "",
         "gnews_api_key": "YOUR_GNEWS_API_KEY",
@@ -90,7 +91,8 @@ def load_config():
 config = load_config()
 
 # v17 migration defaults (backward compatible)
-config.setdefault("ai_provider", "openclaw_local")
+config.setdefault("ai_provider", "auto")
+config.setdefault("ai_fallback_providers", ["openclaw_local", "minimax", "openai", "anthropic"])
 config.setdefault("ai_model", "openai/gpt-4o-mini")
 if config.get("ai_api_key") == "YOUR_AI_API_KEY":
     config["ai_api_key"] = ""
@@ -200,23 +202,28 @@ def load_openclaw_gateway_config():
 
 
 def call_ai_model(prompt, max_tokens=800):
-    provider_name = config.get("ai_provider", "openclaw_local")
-    provider = AI_PROVIDERS.get(provider_name, AI_PROVIDERS["openclaw_local"])
+    provider_name = config.get("ai_provider", "auto")
 
-    # 1) Preferred provider
-    candidates = [provider_name]
-    # 2) If external provider failed/not configured, fallback to local
-    if provider_name != "openclaw_local":
-        candidates.append("openclaw_local")
+    # Build candidate chain
+    if provider_name == "auto":
+        candidates = config.get("ai_fallback_providers", ["openclaw_local", "minimax", "openai", "anthropic"])
+    else:
+        candidates = [provider_name]
+        if provider_name != "openclaw_local":
+            candidates.append("openclaw_local")
 
     for candidate in candidates:
-        p = AI_PROVIDERS[candidate]
+        p = AI_PROVIDERS.get(candidate)
+        if not p:
+            continue
+
         try:
             # OpenClaw local gateway mode (no external API key needed)
             if p["auth_type"] == "openclaw":
                 gw = load_openclaw_gateway_config()
                 if not gw:
                     continue
+
                 headers = {
                     "Authorization": f"Bearer {gw['token']}",
                     "Content-Type": "application/json"
@@ -230,10 +237,21 @@ def call_ai_model(prompt, max_tokens=800):
                     f"http://127.0.0.1:{gw['port']}/v1/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=60
+                    timeout=30
                 )
-                if resp.ok:
-                    return resp.json()["choices"][0]["message"]["content"].strip()
+
+                # Some environments return dashboard HTML; treat as unavailable
+                content_type = (resp.headers.get("content-type") or "").lower()
+                if not resp.ok or "application/json" not in content_type:
+                    print(f"  ⚠️ local gateway 非 JSON 回應，跳過（status={resp.status_code}）", file=sys.stderr)
+                    continue
+
+                data = resp.json()
+                choices = data.get("choices") if isinstance(data, dict) else None
+                if choices and choices[0].get("message", {}).get("content"):
+                    return choices[0]["message"]["content"].strip()
+
+                print("  ⚠️ local gateway JSON 結構不符，跳過", file=sys.stderr)
                 continue
 
             # External provider mode
@@ -265,8 +283,12 @@ def call_ai_model(prompt, max_tokens=800):
             if resp.ok:
                 result = resp.json()
                 if p["auth_type"] == "anthropic":
-                    return result["content"][0]["text"].strip()
-                return result["choices"][0]["message"]["content"].strip()
+                    text = result.get("content", [{}])[0].get("text", "").strip()
+                else:
+                    text = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                if text:
+                    return text
+
         except Exception as e:
             print(f"  ⚠️ AI 呼叫失敗 ({candidate}): {e}", file=sys.stderr)
 
