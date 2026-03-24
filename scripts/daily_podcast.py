@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v17.2
+Daily Podcast Generator v17.3
 AI-powered morning briefing skill for OpenClaw agents.
 
 Creator: Microsense Vision Co., Ltd. | Allan@msviso.com
@@ -13,6 +13,8 @@ import sys
 import json
 import random
 import re
+import subprocess
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -22,7 +24,11 @@ CONFIG_FILE = SCRIPT_DIR / "config.json"
 PODCAST_DIR = Path("/home/ubuntu/clawd/podcast")
 MEDIA_DIR = Path("/home/ubuntu/.openclaw/media")
 MEMORY_DIR = Path("/home/ubuntu/clawd/memory")
-EDGE_TTS = "node /home/ubuntu/.npm-global/lib/node_modules/openclaw/node_modules/node-edge-tts/bin.js"
+EDGE_TTS_CANDIDATES = [
+    ["node", "/home/ubuntu/.npm-global/lib/node_modules/openclaw/node_modules/node-edge-tts/bin.js"],
+    ["node-edge-tts"],
+    ["npx", "-y", "node-edge-tts"],
+]
 
 # ==== Open-Meteo 城市座標 ====
 CITY_COORDS = {
@@ -124,7 +130,10 @@ def send_to_telegram(mp3_file, caption=""):
     if resp.ok:
         print(f"  ✅ 已發送到 Telegram", file=sys.stderr)
     else:
-        print(f"  ❌ Telegram 錯誤: {resp.text[:200]}", file=sys.stderr)
+        msg = resp.text[:200]
+        print(f"  ❌ Telegram 錯誤: {msg}", file=sys.stderr)
+        if "chat not found" in msg.lower():
+            print("  💡 請先讓使用者在 Telegram 主動對 Bot 發送 /start（或任一訊息）以啟用 chat。", file=sys.stderr)
 
 # ==== 天氣（Open-Meteo）====
 def get_weather(location=None):
@@ -368,6 +377,38 @@ def clean_for_tts(text):
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
+
+def resolve_tts_command():
+    for cmd in EDGE_TTS_CANDIDATES:
+        exe = cmd[0]
+        if exe == "node":
+            if len(cmd) > 1 and Path(cmd[1]).exists():
+                return cmd
+        else:
+            if shutil.which(exe):
+                return cmd
+    return None
+
+
+def ensure_tts_command():
+    cmd = resolve_tts_command()
+    if cmd:
+        return cmd
+
+    print("  ⚠️ 未找到 TTS 指令，嘗試自動安裝 node-edge-tts...", file=sys.stderr)
+    try:
+        subprocess.run(["npm", "i", "-g", "node-edge-tts"], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except Exception as e:
+        print(f"  ⚠️ 自動安裝失敗: {e}", file=sys.stderr)
+
+    cmd = resolve_tts_command()
+    if cmd:
+        print("  ✅ TTS 已可用", file=sys.stderr)
+        return cmd
+
+    print("  ❌ TTS 仍不可用。請先安裝：npm i -g node-edge-tts", file=sys.stderr)
+    return None
+
 # ==== GNews 搜尋 ====
 def fetch_gnews(category, query, max_results=None):
     count = max_results or config.get("news_count", 2)
@@ -598,20 +639,33 @@ def generate_voice(script):
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d")
     mp3_file = MEDIA_DIR / f"daily_{date_str}.mp3"
-    cmd = f'{EDGE_TTS} --text "{script}" --filepath "{mp3_file}"'
-    os.system(cmd + " 2>/dev/null")
-    
+
+    tts_cmd = ensure_tts_command()
+    if not tts_cmd:
+        return None
+
+    cmd = tts_cmd + ["--text", script, "--filepath", str(mp3_file)]
+    try:
+        proc = subprocess.run(cmd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if proc.returncode != 0:
+            print(f"  ❌ TTS 執行失敗 (code={proc.returncode})", file=sys.stderr)
+            if proc.stderr:
+                print(f"  stderr: {proc.stderr[:300]}", file=sys.stderr)
+    except Exception as e:
+        print(f"  ❌ TTS 執行例外: {e}", file=sys.stderr)
+        return None
+
     if mp3_file.exists() and mp3_file.stat().st_size > 1000:
         print(f"  🎙️ 語音已產生: {mp3_file}", file=sys.stderr)
         return str(mp3_file)
-    else:
-        print(f"  ❌ 語音產生失敗", file=sys.stderr)
-        return None
+
+    print(f"  ❌ 語音產生失敗", file=sys.stderr)
+    return None
 
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v17.2 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v17.3 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
     # startup diagnostics
