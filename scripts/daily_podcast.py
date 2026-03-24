@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v17.3
+Daily Podcast Generator v18
 AI-powered morning briefing skill for OpenClaw agents.
 
 Creator: Microsense Vision Co., Ltd. | Allan@msviso.com
@@ -87,6 +87,8 @@ def load_config():
         "ai_provider": "auto",
         "ai_fallback_providers": ["openclaw_local", "minimax", "openai", "anthropic"],
         "ai_model": "openai/gpt-4o-mini",
+        "ai_use_agent_fallback": True,
+        "ai_agent_id": "lumi",
         "ai_api_key": "",
         "gnews_api_key": "YOUR_GNEWS_API_KEY",
         "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
@@ -101,6 +103,8 @@ config = load_config()
 config.setdefault("ai_provider", "auto")
 config.setdefault("ai_fallback_providers", ["openclaw_local", "minimax", "openai", "anthropic"])
 config.setdefault("ai_model", "openai/gpt-4o-mini")
+config.setdefault("ai_use_agent_fallback", True)
+config.setdefault("ai_agent_id", "lumi")
 if config.get("ai_api_key") == "YOUR_AI_API_KEY":
     config["ai_api_key"] = ""
 config.setdefault("delivery_mode", "none")
@@ -220,6 +224,38 @@ def load_openclaw_gateway_config():
         return None
 
 
+def call_agent_ai(prompt):
+    agent_id = config.get("ai_agent_id", "lumi")
+    try:
+        proc = subprocess.run(
+            [
+                "openclaw", "agent",
+                "--agent", str(agent_id),
+                "--message", prompt,
+                "--json",
+                "--thinking", "off"
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=120,
+        )
+        if proc.returncode != 0:
+            print(f"  ⚠️ agent fallback 失敗: returncode={proc.returncode}", file=sys.stderr)
+            return None
+        data = json.loads(proc.stdout)
+        payloads = (((data or {}).get("result") or {}).get("payloads") or [])
+        if payloads and isinstance(payloads[0], dict):
+            text = (payloads[0].get("text") or "").strip()
+            if text:
+                print(f"  ✅ agent fallback 成功（agent={agent_id}）", file=sys.stderr)
+                return text
+    except Exception as e:
+        print(f"  ⚠️ agent fallback 例外: {e}", file=sys.stderr)
+    return None
+
+
 def call_ai_model(prompt, max_tokens=800):
     provider_name = config.get("ai_provider", "auto")
 
@@ -315,6 +351,10 @@ def call_ai_model(prompt, max_tokens=800):
 
         except Exception as e:
             print(f"  ⚠️ AI 呼叫失敗 ({candidate}): {e}", file=sys.stderr)
+
+    if config.get("ai_use_agent_fallback", True):
+        print("  🔁 嘗試 agent fallback（無 key 方案）...", file=sys.stderr)
+        return call_agent_ai(prompt)
 
     return None
 
@@ -675,7 +715,7 @@ def generate_voice(script):
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v17.4 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v18 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
     # startup diagnostics

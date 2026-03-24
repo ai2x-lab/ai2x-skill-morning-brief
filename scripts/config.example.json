@@ -12,6 +12,8 @@
   "ai_provider": "auto",
   "ai_fallback_providers": ["openclaw_local", "minimax", "openai", "anthropic"],
   "ai_model": "openai/gpt-4o-mini",
+  "ai_use_agent_fallback": true,
+  "ai_agent_id": "lumi",
   "ai_api_key": "",
   "gnews_api_key": "YOUR_GNEWS_API_KEY",
   "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
