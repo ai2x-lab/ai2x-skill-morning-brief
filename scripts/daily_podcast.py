@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v18
+Daily Podcast Generator v18.1
 AI-powered morning briefing skill for OpenClaw agents.
 
 Creator: Microsense Vision Co., Ltd. | Allan@msviso.com
@@ -15,6 +15,7 @@ import random
 import re
 import subprocess
 import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -108,6 +109,13 @@ config.setdefault("ai_agent_id", "lumi")
 if config.get("ai_api_key") == "YOUR_AI_API_KEY":
     config["ai_api_key"] = ""
 config.setdefault("delivery_mode", "none")
+
+# runtime capability cache (avoid repeated expensive probes)
+_RUNTIME = {
+    "openclaw_cli": None,
+    "agent_fallback": None,
+    "checked_at": 0,
+}
 
 # ==== 儲存標題存档 ====
 def save_headlines_for_agent(headlines, date_str):
@@ -224,6 +232,36 @@ def load_openclaw_gateway_config():
         return None
 
 
+def detect_runtime_capabilities(force=False):
+    now = time.time()
+    if not force and _RUNTIME["checked_at"] and now - _RUNTIME["checked_at"] < 300:
+        return _RUNTIME
+
+    _RUNTIME["openclaw_cli"] = shutil.which("openclaw") is not None
+    _RUNTIME["agent_fallback"] = False
+
+    if _RUNTIME["openclaw_cli"]:
+        try:
+            probe = subprocess.run(
+                ["openclaw", "agent", "--agent", str(config.get("ai_agent_id", "lumi")), "--message", "OK", "--json", "--thinking", "off"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=45,
+            )
+            _RUNTIME["agent_fallback"] = probe.returncode == 0
+            if not _RUNTIME["agent_fallback"]:
+                err = (probe.stderr or "").strip().splitlines()
+                if err:
+                    print(f"  ⚠️ agent fallback probe 失敗: {err[-1][:180]}", file=sys.stderr)
+        except Exception as e:
+            print(f"  ⚠️ agent fallback probe 例外: {e}", file=sys.stderr)
+
+    _RUNTIME["checked_at"] = now
+    return _RUNTIME
+
+
 def call_agent_ai(prompt):
     agent_id = config.get("ai_agent_id", "lumi")
     try:
@@ -242,7 +280,9 @@ def call_agent_ai(prompt):
             timeout=120,
         )
         if proc.returncode != 0:
-            print(f"  ⚠️ agent fallback 失敗: returncode={proc.returncode}", file=sys.stderr)
+            err = (proc.stderr or "").strip().splitlines()
+            tail = err[-1][:180] if err else ""
+            print(f"  ⚠️ agent fallback 失敗: returncode={proc.returncode} {tail}", file=sys.stderr)
             return None
         data = json.loads(proc.stdout)
         payloads = (((data or {}).get("result") or {}).get("payloads") or [])
@@ -353,8 +393,17 @@ def call_ai_model(prompt, max_tokens=800):
             print(f"  ⚠️ AI 呼叫失敗 ({candidate}): {e}", file=sys.stderr)
 
     if config.get("ai_use_agent_fallback", True):
-        print("  🔁 嘗試 agent fallback（無 key 方案）...", file=sys.stderr)
-        return call_agent_ai(prompt)
+        caps = detect_runtime_capabilities()
+        if caps.get("agent_fallback"):
+            print("  🔁 嘗試 agent fallback（無 key 方案）...", file=sys.stderr)
+            out = call_agent_ai(prompt)
+            if out:
+                return out
+        else:
+            print("  ⚠️ agent fallback 不可用（CLI/連線/agent）", file=sys.stderr)
+
+    if not api_key:
+        print("  ⚠️ 無可用 AI 通道：未設定外部 ai_api_key，將使用原稿", file=sys.stderr)
 
     return None
 
@@ -715,7 +764,7 @@ def generate_voice(script):
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v18 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v18.1 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
 
     # startup diagnostics
@@ -725,6 +774,8 @@ def main():
     delivery_mode = config.get("delivery_mode", "none")
     print(f"  🤖 AI provider: {provider}", file=sys.stderr)
     print(f"  📦 delivery_mode: {delivery_mode}", file=sys.stderr)
+    caps = detect_runtime_capabilities()
+    print(f"  🧪 compat: openclaw_cli={caps.get('openclaw_cli')} agent_fallback={caps.get('agent_fallback')}", file=sys.stderr)
     if provider != "openclaw_local" and not key_set:
         print("  ⚠️ 未設定 ai_api_key：翻譯與潤飾可能不可用（除非 local gateway 可用）", file=sys.stderr)
 
