@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-Daily Podcast Generator v18.1
-AI-powered morning briefing skill for OpenClaw agents.
-
-Creator: Microsense Vision Co., Ltd. | Allan@msviso.com
-License: MIT
-https://github.com/ai2x-lab/ai2x-skill-morning-brief
+Daily Podcast Generator v14b - 晨間語音早報
+- GNews API + NewsData.io + BBC RSS
+- Open-Meteo 天氣（更準確）
+- TTS 友善版本
 """
 import requests
 import os
@@ -14,8 +12,6 @@ import json
 import random
 import re
 import subprocess
-import shutil
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -25,11 +21,7 @@ CONFIG_FILE = SCRIPT_DIR / "config.json"
 PODCAST_DIR = Path("/home/ubuntu/clawd/podcast")
 MEDIA_DIR = Path("/home/ubuntu/.openclaw/media")
 MEMORY_DIR = Path("/home/ubuntu/clawd/memory")
-EDGE_TTS_CANDIDATES = [
-    ["node", "/home/ubuntu/.npm-global/lib/node_modules/openclaw/node_modules/node-edge-tts/bin.js"],
-    ["node-edge-tts"],
-    ["npx", "-y", "node-edge-tts"],
-]
+EDGE_TTS = "node /home/ubuntu/.npm-global/lib/node_modules/openclaw/node_modules/node-edge-tts/bin.js"
 
 # ==== Open-Meteo 城市座標 ====
 CITY_COORDS = {
@@ -47,34 +39,6 @@ CITY_COORDS = {
     "Tokyo": {"lat": 35.6762, "lon": 139.6503},
 }
 
-# ==== AI Provider 設定 ====
-AI_PROVIDERS = {
-    "openclaw_local": {
-        "name": "OpenClaw Local",
-        "model": "openai/gpt-4o-mini",
-        "endpoint": None,
-        "auth_type": "openclaw",
-    },
-    "openai": {
-        "name": "OpenAI",
-        "model": "gpt-4o-mini",
-        "endpoint": "https://api.openai.com/v1/chat/completions",
-        "auth_type": "bearer",
-    },
-    "minimax": {
-        "name": "MiniMax",
-        "model": "MiniMax-M2.1",
-        "endpoint": "https://api.minimax.chat/v1/text/chatcompletion_v2",
-        "auth_type": "bearer",
-    },
-    "anthropic": {
-        "name": "Anthropic",
-        "model": "claude-3-haiku-20240307",
-        "endpoint": "https://api.anthropic.com/v1/messages",
-        "auth_type": "anthropic",
-    },
-}
-
 # ==== 載入設定 ====
 def load_config():
     if CONFIG_FILE.exists():
@@ -85,37 +49,13 @@ def load_config():
         "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
         "news_count": 2,
         "sources": ["gnews", "newsdata", "bbc"],
-        "ai_provider": "auto",
-        "ai_fallback_providers": ["openclaw_local", "minimax", "openai", "anthropic"],
-        "ai_model": "openai/gpt-4o-mini",
-        "ai_use_agent_fallback": True,
-        "ai_agent_id": "lumi",
-        "ai_api_key": "",
         "gnews_api_key": "YOUR_GNEWS_API_KEY",
         "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
-        "delivery_mode": "none",
         "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
         "telegram_chat_id": "YOUR_TELEGRAM_CHAT_ID"
     }
 
 config = load_config()
-
-# v17 migration defaults (backward compatible)
-config.setdefault("ai_provider", "auto")
-config.setdefault("ai_fallback_providers", ["openclaw_local", "minimax", "openai", "anthropic"])
-config.setdefault("ai_model", "openai/gpt-4o-mini")
-config.setdefault("ai_use_agent_fallback", True)
-config.setdefault("ai_agent_id", "lumi")
-if config.get("ai_api_key") == "YOUR_AI_API_KEY":
-    config["ai_api_key"] = ""
-config.setdefault("delivery_mode", "none")
-
-# runtime capability cache (avoid repeated expensive probes)
-_RUNTIME = {
-    "openclaw_cli": None,
-    "agent_fallback": None,
-    "checked_at": 0,
-}
 
 # ==== 儲存標題存档 ====
 def save_headlines_for_agent(headlines, date_str):
@@ -136,30 +76,25 @@ def save_headlines_for_agent(headlines, date_str):
 
 # ==== Telegram ====
 def send_to_telegram(mp3_file, caption=""):
-    token = config.get("telegram_bot_token", "")
-    chat_id = config.get("telegram_chat_id", "")
-    if not token or token == "YOUR_TELEGRAM_BOT_TOKEN" or not chat_id or chat_id == "YOUR_TELEGRAM_CHAT_ID":
-        print("  ⚠️ Telegram 未設定，略過傳送", file=sys.stderr)
-        return False
-
-    url = f"https://api.telegram.org/bot{token}/sendAudio"
+    url = f"https://api.telegram.org/bot{config['telegram_bot_token']}/sendAudio"
     with open(mp3_file, "rb") as f:
         files = {"audio": f}
-        data = {"chat_id": chat_id, "caption": caption}
+        data = {"chat_id": config["telegram_chat_id"], "caption": caption}
         resp = requests.post(url, files=files, data=data, timeout=60)
     if resp.ok:
         print(f"  ✅ 已發送到 Telegram", file=sys.stderr)
-        return True
-
-    msg = resp.text[:200]
-    print(f"  ❌ Telegram 錯誤: {msg}", file=sys.stderr)
-    if "chat not found" in msg.lower():
-        print("  💡 請先讓使用者在 Telegram 主動對 Bot 發送 /start（或任一訊息）以啟用 chat。", file=sys.stderr)
-    return False
+    else:
+        print(f"  ❌ Telegram 錯誤: {resp.text[:200]}", file=sys.stderr)
 
 # ==== 天氣（Open-Meteo）====
 def get_weather(location=None):
+    """
+    使用 Open-Meteo API（免費、不需要 API Key）
+    https://open-meteo.com/
+    """
     loc = location or config.get("location", "Xindian,Taiwan")
+    
+    # 解析地點
     city = loc.split(",")[0].strip()
     coords = CITY_COORDS.get(city)
     
@@ -184,12 +119,15 @@ def get_weather(location=None):
         windspeed = float(current.get("windspeed", 0))
         weathercode = int(current.get("weathercode", 0))
         
+        # 解析天氣代碼
         weather_desc = weathercode_to_description(weathercode)
         
+        # 取得濕度
         hourly = data.get("hourly", {})
         humidity_data = hourly.get("relativehumidity_2m", []) if hourly else []
         humidity = humidity_data[0] if humidity_data else None
         
+        # 四捨五入
         temp_rounded = round(temp)
         windspeed_rounded = round(windspeed)
         
@@ -204,214 +142,68 @@ def get_weather(location=None):
         return "天氣資訊取得失敗"
 
 def weathercode_to_description(code):
+    """將 Open-Meteo 天氣碼轉換成中文描述"""
     weather_map = {
-        0: "晴", 1: "晴時多雲", 2: "多雲", 3: "陰天",
-        45: "有霧", 48: "霧凇",
-        51: "小毛毛雨", 53: "中毛毛雨", 55: "大毛毛雨",
-        61: "小雨", 63: "中雨", 65: "大雨",
-        71: "小雪", 73: "中雪", 75: "大雪",
-        80: "陣雨", 81: "中陣雨", 82: "大陣雨",
-        95: "雷暴", 96: "雷暴伴小冰雹", 99: "雷暴伴大冰雹",
+        0: "晴",
+        1: "晴時多雲",
+        2: "多雲",
+        3: "陰天",
+        45: "有霧",
+        48: "霧凇",
+        51: "小毛毛雨",
+        53: "中毛毛雨",
+        55: "大毛毛雨",
+        61: "小雨",
+        63: "中雨",
+        65: "大雨",
+        71: "小雪",
+        73: "中雪",
+        75: "大雪",
+        80: "陣雨",
+        81: "中陣雨",
+        82: "大陣雨",
+        95: "雷暴",
+        96: "雷暴伴小冰雹",
+        99: "雷暴伴大冰雹",
     }
     return weather_map.get(code, "多雲")
 
 
-def load_openclaw_gateway_config():
-    conf = Path.home() / ".openclaw" / "openclaw.json"
-    if not conf.exists():
-        return None
+# ==== 民俗行事曆素材（需 companion-care skill）====
+def get_folk_calendar_brief():
+    if not config.get("folk_calendar_enabled", True):
+        return ""
+
+    script = "/home/ubuntu/clawd/tools/folk_calendar_brief.py"
+    if not os.path.exists(script):
+        return ""
+
     try:
-        data = json.loads(conf.read_text(encoding="utf-8"))
-        gateway = data.get("gateway", {})
-        port = gateway.get("port", 18789)
-        token = gateway.get("auth", {}).get("token", "")
-        if not token:
-            return None
-        return {"port": port, "token": token}
-    except Exception:
-        return None
-
-
-def detect_runtime_capabilities(force=False):
-    now = time.time()
-    if not force and _RUNTIME["checked_at"] and now - _RUNTIME["checked_at"] < 300:
-        return _RUNTIME
-
-    _RUNTIME["openclaw_cli"] = shutil.which("openclaw") is not None
-    _RUNTIME["agent_fallback"] = False
-
-    if _RUNTIME["openclaw_cli"]:
-        try:
-            probe = subprocess.run(
-                ["openclaw", "agent", "--agent", str(config.get("ai_agent_id", "lumi")), "--message", "OK", "--json", "--thinking", "off"],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=45,
-            )
-            _RUNTIME["agent_fallback"] = probe.returncode == 0
-            if not _RUNTIME["agent_fallback"]:
-                err = (probe.stderr or "").strip().splitlines()
-                if err:
-                    print(f"  ⚠️ agent fallback probe 失敗: {err[-1][:180]}", file=sys.stderr)
-        except Exception as e:
-            print(f"  ⚠️ agent fallback probe 例外: {e}", file=sys.stderr)
-
-    _RUNTIME["checked_at"] = now
-    return _RUNTIME
-
-
-def call_agent_ai(prompt):
-    agent_id = config.get("ai_agent_id", "lumi")
-    try:
-        proc = subprocess.run(
-            [
-                "openclaw", "agent",
-                "--agent", str(agent_id),
-                "--message", prompt,
-                "--json",
-                "--thinking", "off"
-            ],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=120,
-        )
-        if proc.returncode != 0:
-            err = (proc.stderr or "").strip().splitlines()
-            tail = err[-1][:180] if err else ""
-            print(f"  ⚠️ agent fallback 失敗: returncode={proc.returncode} {tail}", file=sys.stderr)
-            return None
-        data = json.loads(proc.stdout)
-        payloads = (((data or {}).get("result") or {}).get("payloads") or [])
-        if payloads and isinstance(payloads[0], dict):
-            text = (payloads[0].get("text") or "").strip()
-            if text:
-                print(f"  ✅ agent fallback 成功（agent={agent_id}）", file=sys.stderr)
-                return text
+        out = subprocess.check_output(["python3", script], text=True, timeout=10).strip()
+        if not out:
+            return ""
+        return f"\n【民俗行事曆提醒】\n{out}\n"
     except Exception as e:
-        print(f"  ⚠️ agent fallback 例外: {e}", file=sys.stderr)
-    return None
+        print(f"  ⚠️ 民俗行事曆素材取得失敗: {e}", file=sys.stderr)
+        return ""
 
-
-def call_ai_model(prompt, max_tokens=800):
-    provider_name = config.get("ai_provider", "auto")
-
-    # Quick hint for common misconfiguration
-    api_key = (config.get("ai_api_key", "") or "").strip()
-    if provider_name in ("minimax", "openai", "anthropic") and (not api_key or api_key == "YOUR_AI_API_KEY"):
-        print(f"  ⚠️ {provider_name} 模式未設定 ai_api_key", file=sys.stderr)
-
-    # Build candidate chain
-    if provider_name == "auto":
-        candidates = config.get("ai_fallback_providers", ["openclaw_local", "minimax", "openai", "anthropic"])
-    else:
-        candidates = [provider_name]
-        if provider_name != "openclaw_local":
-            candidates.append("openclaw_local")
-
-    for candidate in candidates:
-        p = AI_PROVIDERS.get(candidate)
-        if not p:
-            continue
-
-        try:
-            # OpenClaw local gateway mode (no external API key needed)
-            if p["auth_type"] == "openclaw":
-                gw = load_openclaw_gateway_config()
-                if not gw:
-                    continue
-
-                headers = {
-                    "Authorization": f"Bearer {gw['token']}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": config.get("ai_model", p["model"]),
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens
-                }
-                resp = requests.post(
-                    f"http://127.0.0.1:{gw['port']}/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=30
-                )
-
-                # Some environments return dashboard HTML; treat as unavailable
-                content_type = (resp.headers.get("content-type") or "").lower()
-                if not resp.ok or "application/json" not in content_type:
-                    print(f"  ⚠️ local gateway 非 JSON 回應，跳過（status={resp.status_code}）", file=sys.stderr)
-                    continue
-
-                data = resp.json()
-                choices = data.get("choices") if isinstance(data, dict) else None
-                if choices and choices[0].get("message", {}).get("content"):
-                    return choices[0]["message"]["content"].strip()
-
-                print("  ⚠️ local gateway JSON 結構不符，跳過", file=sys.stderr)
-                continue
-
-            # External provider mode
-            api_key = config.get("ai_api_key", "")
-            if not api_key:
-                continue
-
-            headers = {"Content-Type": "application/json"}
-            if p["auth_type"] == "bearer":
-                headers["Authorization"] = f"Bearer {api_key}"
-            elif p["auth_type"] == "anthropic":
-                headers["x-api-key"] = api_key
-                headers["anthropic-version"] = "2023-06-01"
-
-            if p["auth_type"] == "anthropic":
-                payload = {
-                    "model": p["model"],
-                    "max_tokens": max_tokens,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-            else:
-                payload = {
-                    "model": p["model"],
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens
-                }
-
-            resp = requests.post(p["endpoint"], headers=headers, json=payload, timeout=60)
-            if resp.ok:
-                result = resp.json()
-                if p["auth_type"] == "anthropic":
-                    text = result.get("content", [{}])[0].get("text", "").strip()
-                else:
-                    text = result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-                if text:
-                    return text
-
-        except Exception as e:
-            print(f"  ⚠️ AI 呼叫失敗 ({candidate}): {e}", file=sys.stderr)
-
-    if config.get("ai_use_agent_fallback", True):
-        caps = detect_runtime_capabilities()
-        if caps.get("agent_fallback"):
-            print("  🔁 嘗試 agent fallback（無 key 方案）...", file=sys.stderr)
-            out = call_agent_ai(prompt)
-            if out:
-                return out
-        else:
-            print("  ⚠️ agent fallback 不可用（CLI/連線/agent）", file=sys.stderr)
-
-    if not api_key:
-        print("  ⚠️ 無可用 AI 通道：未設定外部 ai_api_key，將使用原稿", file=sys.stderr)
-
-    return None
+# ==== OpenAI API Key ====
+def get_openai_key():
+    try:
+        with open(os.path.expanduser("~/.openclaw/openclaw.json"), "r") as f:
+            config_oc = json.load(f)
+            return config_oc.get("models", {}).get("providers", {}).get("openai", {}).get("apiKey", "")
+    except:
+        return ""
 
 # ==== AI 翻譯 ====
 def translate_to_chinese(text):
     if not text or len(text) < 5:
         return text
-
+    api_key = get_openai_key()
+    if not api_key:
+        return text
+    
     prompt = f"""請將以下英文新聞翻譯成繁體中文，保持新聞風格。
 
 規則：
@@ -423,20 +215,41 @@ def translate_to_chinese(text):
 {text}
 
 中文翻譯："""
-
-    result = call_ai_model(prompt, max_tokens=800)
-    if result:
-        return result
-
-    print("  ⚠️ AI 翻譯不可用，保留原文", file=sys.stderr)
+    
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 800},
+            timeout=30
+        )
+        if resp.ok:
+            return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"  ⚠️ 翻譯錯誤: {e}", file=sys.stderr)
     return text
 
 # ==== AI 潤飾（TTS 友善版）====
 def polish_script(draft):
-    polish_instructions = """
+    api_key = get_openai_key()
+    if not api_key:
+        print(f"  ⚠️ 無 API key，跳過潤飾", file=sys.stderr)
+        return draft
+
+    target_sec = int(config.get("voice_max_duration", 300) or 300)
+    # 中文語速粗估：每分鐘 230~260 字，取中間值 245
+    target_chars = max(700, int(target_sec / 60 * 245))
+    lower = int(target_chars * 0.85)
+    upper = int(target_chars * 1.15)
+
+    polish_instructions = f"""
 你是一位貼心的私人助理，正在為你的主人準備晨間新聞摘要。
 
-請將以下初稿潤飾成一個「適合語音朗讀」的有溫度版本：
+請將以下初稿潤飾成一個「適合語音朗讀」的有溫度版本。
+
+【長度目標】
+- 目標時長：約 {target_sec // 60} 分鐘
+- 目標字數：大約 {lower} 到 {upper} 字
 
 【嚴格規則】
 1. 不要使用任何特殊符號
@@ -447,27 +260,31 @@ def polish_script(draft):
 6. 數字和英文可以直接保留
 
 【內容規則】
-1. 先給三行重點摘要：國際、科技、經濟或能源（有資料才寫）
-2. 標題保留，但用更口語的方式表達
-3. 新聞之間可以加一句簡短的個人註解
+1. 標題保留，但用更口語的方式表達
+2. 新聞之間可以加一句簡短的個人註解
+3. 開場和結尾要像朋友說話
 4. 每則新聞濃縮成 2-3 句重點精華
-5. 保持資訊準確
-6. 最後加一段今天行動建議（不超過 2 句）
+5. 若有民俗行事曆提醒，放在結尾前 1 段，語氣自然
+6. 保持資訊準確
 
 初稿：
 """ + draft
 
-    print("  ✨ AI 潤飾中...", file=sys.stderr)
-    result = call_ai_model(polish_instructions, max_tokens=2500)
-    if result:
-        result = clean_for_tts(result)
-        # 品質防呆：過短就回退原稿
-        if len(result) >= max(180, len(draft) // 3):
-            print("  ✅ 潤飾完成", file=sys.stderr)
+    try:
+        print(f"  ✨ AI 潤飾中...", file=sys.stderr)
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": polish_instructions}], "max_tokens": 2500},
+            timeout=60
+        )
+        if resp.ok:
+            result = resp.json()["choices"][0]["message"]["content"].strip()
+            result = clean_for_tts(result)
+            print(f"  ✅ 潤飾完成", file=sys.stderr)
             return result
-        print("  ⚠️ 潤飾結果過短，使用原稿", file=sys.stderr)
-
-    print("  ⚠️ AI 潤飾不可用，使用原稿", file=sys.stderr)
+    except Exception as e:
+        print(f"  ⚠️ 潤飾錯誤: {e}", file=sys.stderr)
     return draft
 
 # ==== TTS 文字清理 ====
@@ -475,38 +292,6 @@ def clean_for_tts(text):
     text = re.sub(r'[^\w\s\u4e00-\u9fff\u3000-\u303f\uff00-\uffef\n。，！？、；：""''（）【】《》]', '', text)
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
-
-
-def resolve_tts_command():
-    for cmd in EDGE_TTS_CANDIDATES:
-        exe = cmd[0]
-        if exe == "node":
-            if len(cmd) > 1 and Path(cmd[1]).exists():
-                return cmd
-        else:
-            if shutil.which(exe):
-                return cmd
-    return None
-
-
-def ensure_tts_command():
-    cmd = resolve_tts_command()
-    if cmd:
-        return cmd
-
-    print("  ⚠️ 未找到 TTS 指令，嘗試自動安裝 node-edge-tts...", file=sys.stderr)
-    try:
-        subprocess.run(["npm", "i", "-g", "node-edge-tts"], check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    except Exception as e:
-        print(f"  ⚠️ 自動安裝失敗: {e}", file=sys.stderr)
-
-    cmd = resolve_tts_command()
-    if cmd:
-        print("  ✅ TTS 已可用", file=sys.stderr)
-        return cmd
-
-    print("  ❌ TTS 仍不可用。請先安裝：npm i -g node-edge-tts", file=sys.stderr)
-    return None
 
 # ==== GNews 搜尋 ====
 def fetch_gnews(category, query, max_results=None):
@@ -674,6 +459,8 @@ def generate_script():
     weekday = ["一", "二", "三", "四", "五", "六", "日"][datetime.now().weekday()]
     weather = get_weather()
     
+    folk_calendar = get_folk_calendar_brief()
+
     draft = f"""Hi Weichien，早安！
 
 今天新店的氣溫是{weather}，記得多穿點出門。
@@ -710,6 +497,9 @@ def generate_script():
             for item in items:
                 all_headlines.append(f"- [{category}] {item['title']}（來源：{item.get('source', 'N/A')}）")
     
+    if folk_calendar:
+        draft += "\n" + folk_calendar
+
     draft += """
 以上就是今天的早報，祝你有美好的一天！
 
@@ -738,63 +528,29 @@ def generate_voice(script):
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d")
     mp3_file = MEDIA_DIR / f"daily_{date_str}.mp3"
-
-    tts_cmd = ensure_tts_command()
-    if not tts_cmd:
-        return None
-
-    cmd = tts_cmd + ["--text", script, "--filepath", str(mp3_file)]
-    try:
-        proc = subprocess.run(cmd, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if proc.returncode != 0:
-            print(f"  ❌ TTS 執行失敗 (code={proc.returncode})", file=sys.stderr)
-            if proc.stderr:
-                print(f"  stderr: {proc.stderr[:300]}", file=sys.stderr)
-    except Exception as e:
-        print(f"  ❌ TTS 執行例外: {e}", file=sys.stderr)
-        return None
-
+    cmd = f'{EDGE_TTS} --text "{script}" --filepath "{mp3_file}"'
+    os.system(cmd + " 2>/dev/null")
+    
     if mp3_file.exists() and mp3_file.stat().st_size > 1000:
         print(f"  🎙️ 語音已產生: {mp3_file}", file=sys.stderr)
         return str(mp3_file)
-
-    print(f"  ❌ 語音產生失敗", file=sys.stderr)
-    return None
+    else:
+        print(f"  ❌ 語音產生失敗", file=sys.stderr)
+        return None
 
 # ==== 主程式 ====
 def main():
     print("=" * 50, file=sys.stderr)
-    print(f"🎙️ 每日早報 v18.1 - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
+    print(f"🎙️ 每日早報 v14b (Open-Meteo 天氣) - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
-
-    # startup diagnostics
-    provider = config.get("ai_provider", "auto")
-    api_key = (config.get("ai_api_key", "") or "").strip()
-    key_set = bool(api_key and api_key != "YOUR_AI_API_KEY")
-    delivery_mode = config.get("delivery_mode", "none")
-    print(f"  🤖 AI provider: {provider}", file=sys.stderr)
-    print(f"  📦 delivery_mode: {delivery_mode}", file=sys.stderr)
-    caps = detect_runtime_capabilities()
-    print(f"  🧪 compat: openclaw_cli={caps.get('openclaw_cli')} agent_fallback={caps.get('agent_fallback')}", file=sys.stderr)
-    if provider != "openclaw_local" and not key_set:
-        print("  ⚠️ 未設定 ai_api_key：翻譯與潤飾可能不可用（除非 local gateway 可用）", file=sys.stderr)
-
+    
     script = generate_script()
     mp3_file = generate_voice(script)
-
+    
     if mp3_file:
         caption = f"🎙️ {datetime.now().strftime('%Y/%m/%d')} 晨間摘要"
-        delivered = False
-
-        if delivery_mode == "telegram":
-            delivered = send_to_telegram(mp3_file, caption)
-        elif delivery_mode == "stdout":
-            print(f"AUDIO_FILE={mp3_file}")
-            delivered = True
-        else:
-            print("  ℹ️ delivery_mode=none：僅產生檔案，不主動推播", file=sys.stderr)
-
-        print(f"  ✅ 完成! delivered={delivered}", file=sys.stderr)
+        send_to_telegram(mp3_file, caption)
+        print(f"  ✅ 完成!", file=sys.stderr)
     else:
         print("  ❌ 失敗", file=sys.stderr)
         sys.exit(1)
