@@ -30,31 +30,49 @@ def main():
     festivals_today = [f.get("name_zh") for f in (record.get("festivals") or []) if f.get("name_zh")]
 
     items = ((r.get("data") or {}).get("items") or [])
-    next7 = []
+    # T-3 / T-1 / today only
+    target_offsets = {0: "今天", 1: "明天", 3: "三天後"}
+    reminders = []
+
     for it in items:
-        date = it.get("solar_date")
+        date_str = it.get("solar_date")
+        if not date_str:
+            continue
+        try:
+            d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except Exception:
+            continue
+
+        delta = (d - today).days
+        if delta not in target_offsets:
+            continue
+
         for f in it.get("festivals") or []:
             name = f.get("name_zh")
-            if name and date:
-                next7.append((date, name))
+            if name:
+                reminders.append((delta, date_str, name))
 
-    # de-dup
+    # de-dup and stable sort
     seen = set()
     uniq = []
-    for d, n in sorted(next7):
-        k = (d, n)
+    for delta, d, n in sorted(reminders, key=lambda x: (x[0], x[1], x[2])):
+        k = (delta, d, n)
         if k in seen:
             continue
         seen.add(k)
-        uniq.append((d, n))
+        uniq.append((delta, d, n))
 
     print(f"農曆：{lunar_text} ({lunar_code})")
     if festivals_today:
         print("今日民俗重點：" + "；".join(f"今天是{x}" for x in festivals_today))
+
     if uniq:
-        print("七日內節慶：" + "、".join(f"{d} {n}" for d, n in uniq))
+        msg = []
+        for delta, d, n in uniq:
+            msg.append(f"{target_offsets.get(delta, str(delta)+'天後')}（{d}）{n}")
+        print("節慶提醒（T-3/T-1/當天）：" + "、".join(msg))
     else:
-        print("七日內節慶：無")
+        print("節慶提醒（T-3/T-1/當天）：無")
 
 
 if __name__ == "__main__":
