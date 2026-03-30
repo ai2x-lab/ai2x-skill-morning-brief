@@ -5,6 +5,7 @@
 ```json
 {
   "location": "Taipei,Taiwan",
+  "listener_name": "朋友",
   "topics": [
     ["分類名稱", "搜尋關鍵字"]
   ],
@@ -19,6 +20,11 @@
 ```
 
 ## 欄位說明
+
+### listener_name
+晨報開場稱呼（避免固定寫死某個名字）。
+
+建議第一次安裝時由 Agent 主動詢問使用者偏好稱呼，再寫入此欄位。
 
 ### location
 天氣查詢地點。

@@ -108,6 +108,20 @@ vim ~/clawd/skills/daily-podcast/scripts/config.json
 - `["newsdata"]` - 只用 NewsData  
 - `["gnews", "newsdata"]` - 同時使用
 
+## 使用前提醒（重要）
+
+Agent 第一次部署時，請先詢問使用者希望的晨報稱呼，並寫入 `scripts/config.json` 的 `listener_name`。
+
+例如：
+
+```json
+{
+  "listener_name": "阿美姐"
+}
+```
+
+避免使用固定預設稱呼造成違和感。
+
 ## 使用方式
 
 ```bash

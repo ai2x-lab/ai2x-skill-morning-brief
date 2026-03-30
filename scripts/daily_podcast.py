@@ -461,7 +461,9 @@ def generate_script():
     
     folk_calendar = get_folk_calendar_brief()
 
-    draft = f"""Hi Weichien，早安！
+    listener_name = (config.get("listener_name") or "朋友").strip()
+
+    draft = f"""Hi {listener_name}，早安！
 
 今天新店的氣溫是{weather}，記得多穿點出門。
 
