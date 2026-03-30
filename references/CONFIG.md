@@ -12,6 +12,7 @@
   "news_count": 2,
   "voice_max_duration": 300,
   "sources": ["gnews", "newsdata"],
+  "pipeline_mode": "agent_delegated",
   "llm_provider": "openai-compatible",
   "llm_base_url": "https://api.openai.com/v1/chat/completions",
   "llm_model": "gpt-4o-mini",
@@ -54,6 +55,16 @@
 語音最大時長（秒）。
 
 預設：`300`（5 分鐘）
+
+### pipeline_mode
+內容流程模式。
+
+| 值 | 說明 |
+|----|------|
+| `agent_delegated` | 只做資料彙整與初稿，翻譯/潤飾交給使用者 Agent |
+| `self_render` | 由本 skill 直接完成翻譯與潤飾 |
+
+> 建議預設使用 `agent_delegated`，可讓客戶用自己的模型與語氣。
 
 ### sources
 使用的新聞來源。

@@ -49,6 +49,7 @@ def load_config():
         "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
         "news_count": 2,
         "sources": ["gnews", "newsdata", "bbc"],
+        "pipeline_mode": "agent_delegated",
         "llm_provider": "openai-compatible",
         "llm_base_url": "https://api.openai.com/v1/chat/completions",
         "llm_model": "gpt-4o-mini",
@@ -60,6 +61,10 @@ def load_config():
     }
 
 config = load_config()
+
+
+def is_agent_delegated_mode():
+    return (config.get("pipeline_mode") or "self_render").strip() == "agent_delegated"
 
 # ==== 儲存標題存档 ====
 def save_headlines_for_agent(headlines, date_str):
@@ -77,6 +82,27 @@ def save_headlines_for_agent(headlines, date_str):
     with open(filename, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"  📋 標題已存档: {filename}", file=sys.stderr)
+
+
+def save_brief_payload(payload, date_str):
+    PODCAST_DIR.mkdir(parents=True, exist_ok=True)
+    payload_file = PODCAST_DIR / f"payload_{date_str.replace('-', '')}.json"
+    with open(payload_file, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    print(f"  📦 payload 已存: {payload_file}", file=sys.stderr)
+
+    render_input_file = PODCAST_DIR / f"render_input_{date_str.replace('-', '')}.md"
+    lines = [
+        f"# Morning Brief Render Input - {date_str}",
+        "",
+        "請使用本資料進行翻譯與潤飾，產生適合使用者語氣的最終晨報稿。",
+        "",
+        "## 摘要資料",
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    ]
+    with open(render_input_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"  🧩 render input 已存: {render_input_file}", file=sys.stderr)
 
 # ==== Telegram ====
 def send_to_telegram(mp3_file, caption=""):
@@ -97,15 +123,15 @@ def get_weather(location=None):
     https://open-meteo.com/
     """
     loc = location or config.get("location", "Xindian,Taiwan")
-    
+
     # 解析地點
     city = loc.split(",")[0].strip()
     coords = CITY_COORDS.get(city)
-    
+
     if not coords:
         coords = {"lat": 24.9673, "lon": 121.5416}
         print(f"  ⚠️ 未知地點 {city}，使用預設新店", file=sys.stderr)
-    
+
     try:
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
@@ -117,30 +143,30 @@ def get_weather(location=None):
         }
         resp = requests.get(url, params=params, timeout=10)
         data = resp.json()
-        
+
         current = data.get("current_weather", {})
         temp = float(current.get("temperature", 0))
         windspeed = float(current.get("windspeed", 0))
         weathercode = int(current.get("weathercode", 0))
-        
+
         # 解析天氣代碼
         weather_desc = weathercode_to_description(weathercode)
-        
+
         # 取得濕度
         hourly = data.get("hourly", {})
         humidity_data = hourly.get("relativehumidity_2m", []) if hourly else []
         humidity = humidity_data[0] if humidity_data else None
-        
+
         # 四捨五入
         temp_rounded = round(temp)
         windspeed_rounded = round(windspeed)
-        
+
         result = f"{temp_rounded}度，{weather_desc}，風速{windspeed_rounded}公里"
         if humidity is not None:
             result += f"，濕度{round(humidity)}%"
-        
+
         return result
-        
+
     except Exception as e:
         print(f"  ⚠️ 天氣取得失敗: {e}", file=sys.stderr)
         return "天氣資訊取得失敗"
@@ -173,7 +199,7 @@ def weathercode_to_description(code):
     return weather_map.get(code, "多雲")
 
 
-# ==== 民俗行事曆素材（需 companion-care skill）====
+# ==== 民俗行事曆素材（需 lunar-calendar / twcal）====
 def get_folk_calendar_brief():
     if not config.get("folk_calendar_enabled", True):
         return ""
@@ -250,6 +276,8 @@ def llm_chat(prompt: str, max_tokens: int = 800, timeout: int = 60):
 def translate_to_chinese(text):
     if not text or len(text) < 5:
         return text
+    if is_agent_delegated_mode():
+        return text
 
     prompt = f"""請將以下英文新聞翻譯成繁體中文，保持新聞風格。
 
@@ -269,6 +297,10 @@ def translate_to_chinese(text):
 
 # ==== AI 潤飾（TTS 友善版）====
 def polish_script(draft):
+    if is_agent_delegated_mode():
+        print("  ℹ️ agent_delegated 模式：跳過內建潤飾，交由使用者 Agent 後處理", file=sys.stderr)
+        return draft
+
     if not get_llm_config().get("api_key"):
         print(f"  ⚠️ 無 LLM API key，跳過潤飾", file=sys.stderr)
         return draft
@@ -327,33 +359,33 @@ def fetch_gnews(category, query, max_results=None):
     key = config.get("gnews_api_key", "")
     if not key or key == "YOUR_GNEWS_API_KEY":
         return []
-    
+
     print(f"  🔍 GNews - {category}", file=sys.stderr)
     try:
         url = "https://gnews.io/api/v4/search"
         params = {"q": query, "lang": "en", "max": count, "apikey": key}
         resp = requests.get(url, params=params, timeout=15)
         data = resp.json()
-        
+
         articles = data.get("articles", [])
         results = []
         for art in articles:
             title = art.get("title", "")
             content = art.get("content", "") or art.get("description", "")
             source = art.get("source", {}).get("name", "")
-            
+
             if title and content:
                 content = content.replace("Synopsis\n", "")
                 if len(content) > 600:
                     content = content[:600] + "..."
-                
+
                 results.append({
                     "title": title,
                     "content": content,
                     "source": source,
                     "source_name": "GNews"
                 })
-        
+
         print(f"    ✅ 取得 {len(results)} 則", file=sys.stderr)
         return results
     except Exception as e:
@@ -366,21 +398,21 @@ def fetch_newsdata(category, query, max_results=None):
     key = config.get("newsdata_api_key", "")
     if not key or key == "YOUR_NEWSDATA_API_KEY":
         return []
-    
+
     print(f"  🔍 NewsData - {category}", file=sys.stderr)
     try:
         url = "https://newsdata.io/api/1/news"
         params = {"apikey": key, "q": query, "language": "en", "size": count}
         resp = requests.get(url, params=params, timeout=15)
         data = resp.json()
-        
+
         articles = data.get("results", [])
         results = []
         for art in articles:
             title = art.get("title", "")
             description = art.get("description", "") or art.get("content", "")
             source = art.get("source_name", "")
-            
+
             if title and description and description != "ONLY AVAILABLE IN PAID PLANS":
                 results.append({
                     "title": title,
@@ -388,7 +420,7 @@ def fetch_newsdata(category, query, max_results=None):
                     "source": source,
                     "source_name": "NewsData"
                 })
-        
+
         print(f"    ✅ 取得 {len(results)} 則", file=sys.stderr)
         return results
     except Exception as e:
@@ -398,23 +430,23 @@ def fetch_newsdata(category, query, max_results=None):
 # ==== BBC RSS 抓取 ====
 def fetch_bbc_rss(category, max_results=None):
     count = max_results or config.get("news_count", 2)
-    
+
     bbc_feeds = {
         "國際": "https://feeds.bbci.co.uk/news/world/rss.xml",
         "科技": "https://feeds.bbci.co.uk/news/technology/rss.xml",
         "經濟": "https://feeds.bbci.co.uk/news/business/rss.xml",
     }
-    
+
     rss_url = bbc_feeds.get(category)
     if not rss_url:
         print(f"  ⚠️ BBC - {category} 無對應 feed", file=sys.stderr)
         return []
-    
+
     print(f"  🔍 BBC RSS - {category}", file=sys.stderr)
     try:
         resp = requests.get(rss_url, timeout=15)
         items = parse_rss_items(resp.text)
-        
+
         results = []
         for item in items[:count]:
             title = item.get("title", "")
@@ -426,7 +458,7 @@ def fetch_bbc_rss(category, max_results=None):
                     "source": "BBC News",
                     "source_name": "BBC"
                 })
-        
+
         print(f"    ✅ BBC 取得 {len(results)} 則", file=sys.stderr)
         return results
     except Exception as e:
@@ -439,45 +471,45 @@ def parse_rss_items(xml_text):
     items = []
     item_pattern = re.compile(r'<item>(.*?)</item>', re.DOTALL)
     items_xml = item_pattern.findall(xml_text)
-    
+
     for item_xml in items_xml:
         title = re.search(r'<title><!\[CDATA\[(.*?)\]\]></title>', item_xml)
         if not title:
             title = re.search(r'<title>(.*?)</title>', item_xml)
-        
+
         desc = re.search(r'<description><!\[CDATA\[(.*?)\]\]></description>', item_xml)
         if not desc:
             desc = re.search(r'<description>(.*?)</description>', item_xml)
-        
+
         items.append({
             "title": title.group(1) if title else "",
             "description": desc.group(1) if desc else ""
         })
-    
+
     return items
 
 # ==== 格式化新聞初稿 ====
 def format_news_draft(news_items, category):
     if not news_items:
         return ""
-    
+
     output = f"\n【{category}】\n"
-    
+
     for i, item in enumerate(news_items, 1):
         title_cn = translate_to_chinese(item["title"])
         content_cn = translate_to_chinese(item["content"])
-        
+
         output += f"{i}. {title_cn}。"
-        
+
         if content_cn:
             sentences = content_cn.split("。")
             first = sentences[0] if sentences else content_cn[:100]
             if len(first) > 150:
                 first = first[:150] + "..."
             output += f" {first}。"
-        
+
         output += "\n"
-    
+
     return output
 
 # ==== 產生腳本 ====
@@ -486,7 +518,7 @@ def generate_script():
     date_str = datetime.now().strftime("%Y-%m-%d")
     weekday = ["一", "二", "三", "四", "五", "六", "日"][datetime.now().weekday()]
     weather = get_weather()
-    
+
     folk_calendar = get_folk_calendar_brief()
 
     listener_name = (config.get("listener_name") or "朋友").strip()
@@ -496,37 +528,45 @@ def generate_script():
 今天新店的氣溫是{weather}，記得多穿點出門。
 
 {today}，星期{weekday}，以下是今天的早報："""
-    
+
     topics = config.get("topics", []).copy()
     random.shuffle(topics)
-    
+
     all_headlines = []
+    payload_items = []
     news_count = 0
     sources = config.get("sources", ["gnews"])
-    
+
     for category, query in topics:
         if news_count >= 10:
             break
-        
+
         items = []
-        
+
         if "gnews" in sources:
             items = fetch_gnews(category, query)
-        
+
         if not items and "newsdata" in sources:
             items = fetch_newsdata(category, query)
-        
+
         if not items and "bbc" in sources:
             items = fetch_bbc_rss(category)
-        
+
         if items:
             formatted = format_news_draft(items, category)
             draft += formatted
             news_count += len(items)
-            
+
             for item in items:
                 all_headlines.append(f"- [{category}] {item['title']}（來源：{item.get('source', 'N/A')}）")
-    
+                payload_items.append({
+                    "category": category,
+                    "title": item.get("title", ""),
+                    "content": item.get("content", ""),
+                    "source": item.get("source", "N/A"),
+                    "source_name": item.get("source_name", ""),
+                })
+
     if folk_calendar:
         draft += "\n" + folk_calendar
 
@@ -534,23 +574,36 @@ def generate_script():
 以上就是今天的早報，祝你有美好的一天！
 
 想深入了解哪個議題，隨時告訴我。"""
-    
+
     PODCAST_DIR.mkdir(parents=True, exist_ok=True)
     draft_file = PODCAST_DIR / f"draft_{date_str.replace('-', '')}.txt"
     with open(draft_file, "w", encoding="utf-8") as f:
         f.write(draft)
     print(f"  📝 初稿已存: {draft_file}", file=sys.stderr)
-    
+
     headlines_text = "\n".join(all_headlines)
     save_headlines_for_agent(headlines_text, date_str)
-    
+
+    payload = {
+        "date": date_str,
+        "listener_name": listener_name,
+        "location": config.get("location", ""),
+        "weather": weather,
+        "weekday": weekday,
+        "pipeline_mode": config.get("pipeline_mode", "self_render"),
+        "folk_calendar": folk_calendar.strip() if folk_calendar else "",
+        "items": payload_items,
+        "headlines": all_headlines,
+    }
+    save_brief_payload(payload, date_str)
+
     polished = polish_script(draft)
-    
+
     script_file = PODCAST_DIR / f"script_{date_str.replace('-', '')}.txt"
     with open(script_file, "w", encoding="utf-8") as f:
         f.write(polished)
     print(f"  ✨ 潤飾後版本已存: {script_file}", file=sys.stderr)
-    
+
     return polished
 
 # ==== 產生語音 ====
@@ -560,7 +613,7 @@ def generate_voice(script):
     mp3_file = MEDIA_DIR / f"daily_{date_str}.mp3"
     cmd = f'{EDGE_TTS} --text "{script}" --filepath "{mp3_file}"'
     os.system(cmd + " 2>/dev/null")
-    
+
     if mp3_file.exists() and mp3_file.stat().st_size > 1000:
         print(f"  🎙️ 語音已產生: {mp3_file}", file=sys.stderr)
         return str(mp3_file)
@@ -573,10 +626,10 @@ def main():
     print("=" * 50, file=sys.stderr)
     print(f"🎙️ 每日早報 v14b (Open-Meteo 天氣) - {datetime.now().strftime('%Y-%m-%d %H:%M')}", file=sys.stderr)
     print("=" * 50, file=sys.stderr)
-    
+
     script = generate_script()
     mp3_file = generate_voice(script)
-    
+
     if mp3_file:
         caption = f"🎙️ {datetime.now().strftime('%Y/%m/%d')} 晨間摘要"
         send_to_telegram(mp3_file, caption)

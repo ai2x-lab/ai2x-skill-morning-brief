@@ -148,11 +148,13 @@ python3 ~/clawd/skills/daily-podcast/scripts/daily_podcast.py
 ```
 1. 收集天氣
 2. 抓取新聞（GNews → NewsData 備用）
-3. AI 翻譯成繁體中文
-4. AI 潤飾（有溫度的版本）
+3. 產生資料包 payload（供使用者 Agent 後處理）
+4. 依 pipeline_mode：
+   - agent_delegated：跳過內建翻譯/潤飾
+   - self_render：由本 skill 直接翻譯/潤飾
 5. 產生語音
 6. 發送到 Telegram
-7. 存档標題供 Agent 查閱
+7. 存档標題與 payload 供 Agent 查閱
 ```
 
 ## Agent 使用

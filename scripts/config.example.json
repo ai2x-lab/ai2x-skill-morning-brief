@@ -11,6 +11,7 @@
   "news_count": 2,
   "voice_max_duration": 300,
   "sources": ["gnews", "newsdata", "bbc"],
+  "pipeline_mode": "agent_delegated",
   "llm_provider": "openai-compatible",
   "llm_base_url": "https://api.openai.com/v1/chat/completions",
   "llm_model": "gpt-4o-mini",

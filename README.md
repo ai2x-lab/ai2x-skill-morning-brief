@@ -7,7 +7,7 @@
 - 🤖 自動收集新聞（GNews + NewsData.io + BBC RSS）
 - 🌤️ Open-Meteo 即時天氣（免費、不需 API Key）
 - 🌐 AI 翻譯成繁體中文
-- ✨ AI 潤飾（自然對話風格）
+- ✨ AI 潤飾（自然對話風格，可交由使用者 Agent）
 - 🎙️ 語音輸出（Edge TTS）
 - 📤 Telegram 自動推播
 - 📋 標題存档（供 Agent 後續查閱）
@@ -92,6 +92,7 @@ crontab -e
 | 潤飾稿 | `~/clawd/podcast/script_YYYYMMDD.txt` |
 | 語音 | `~/.openclaw/media/daily_YYYYMMDD.mp3` |
 | 標題存档 | `~/clawd/memory/daily-podcast-YYYY-MM-DD.md` |
+| 資料包 payload | `~/clawd/podcast/payload_YYYYMMDD.json` |
 
 ## 常見問題
 
