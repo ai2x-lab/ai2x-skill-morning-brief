@@ -49,6 +49,10 @@ def load_config():
         "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
         "news_count": 2,
         "sources": ["gnews", "newsdata", "bbc"],
+        "llm_provider": "openai-compatible",
+        "llm_base_url": "https://api.openai.com/v1/chat/completions",
+        "llm_model": "gpt-4o-mini",
+        "llm_api_key": "YOUR_LLM_API_KEY",
         "gnews_api_key": "YOUR_GNEWS_API_KEY",
         "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
         "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
@@ -187,23 +191,66 @@ def get_folk_calendar_brief():
         print(f"  ⚠️ 民俗行事曆素材取得失敗: {e}", file=sys.stderr)
         return ""
 
-# ==== OpenAI API Key ====
-def get_openai_key():
+# ==== LLM Provider Config (Provider-agnostic) ====
+def get_default_openai_key_from_openclaw():
     try:
         with open(os.path.expanduser("~/.openclaw/openclaw.json"), "r") as f:
             config_oc = json.load(f)
             return config_oc.get("models", {}).get("providers", {}).get("openai", {}).get("apiKey", "")
-    except:
+    except Exception:
         return ""
+
+
+def get_llm_config():
+    provider = (config.get("llm_provider") or "openai").strip()
+    base_url = (config.get("llm_base_url") or "https://api.openai.com/v1/chat/completions").strip()
+    model = (config.get("llm_model") or "gpt-4o-mini").strip()
+    api_key = (config.get("llm_api_key") or "").strip()
+
+    if not api_key:
+        # Backward-compatible fallback: reuse openclaw openai key when available
+        api_key = get_default_openai_key_from_openclaw()
+
+    return {
+        "provider": provider,
+        "base_url": base_url,
+        "model": model,
+        "api_key": api_key,
+    }
+
+
+def llm_chat(prompt: str, max_tokens: int = 800, timeout: int = 60):
+    cfg = get_llm_config()
+    if not cfg["api_key"]:
+        return None
+
+    try:
+        resp = requests.post(
+            cfg["base_url"],
+            headers={"Authorization": f"Bearer {cfg['api_key']}", "Content-Type": "application/json"},
+            json={
+                "model": cfg["model"],
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+            },
+            timeout=timeout,
+        )
+        if not resp.ok:
+            print(f"  ⚠️ LLM API 錯誤: {resp.status_code} {resp.text[:200]}", file=sys.stderr)
+            return None
+
+        data = resp.json()
+        return (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip() or None
+    except Exception as e:
+        print(f"  ⚠️ LLM 呼叫失敗: {e}", file=sys.stderr)
+        return None
+
 
 # ==== AI 翻譯 ====
 def translate_to_chinese(text):
     if not text or len(text) < 5:
         return text
-    api_key = get_openai_key()
-    if not api_key:
-        return text
-    
+
     prompt = f"""請將以下英文新聞翻譯成繁體中文，保持新聞風格。
 
 規則：
@@ -215,25 +262,15 @@ def translate_to_chinese(text):
 {text}
 
 中文翻譯："""
-    
-    try:
-        resp = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 800},
-            timeout=30
-        )
-        if resp.ok:
-            return resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        print(f"  ⚠️ 翻譯錯誤: {e}", file=sys.stderr)
-    return text
+
+    result = llm_chat(prompt, max_tokens=800, timeout=45)
+    return result or text
+
 
 # ==== AI 潤飾（TTS 友善版）====
 def polish_script(draft):
-    api_key = get_openai_key()
-    if not api_key:
-        print(f"  ⚠️ 無 API key，跳過潤飾", file=sys.stderr)
+    if not get_llm_config().get("api_key"):
+        print(f"  ⚠️ 無 LLM API key，跳過潤飾", file=sys.stderr)
         return draft
 
     target_sec = int(config.get("voice_max_duration", 300) or 300)
@@ -270,21 +307,12 @@ def polish_script(draft):
 初稿：
 """ + draft
 
-    try:
-        print(f"  ✨ AI 潤飾中...", file=sys.stderr)
-        resp = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": polish_instructions}], "max_tokens": 2500},
-            timeout=60
-        )
-        if resp.ok:
-            result = resp.json()["choices"][0]["message"]["content"].strip()
-            result = clean_for_tts(result)
-            print(f"  ✅ 潤飾完成", file=sys.stderr)
-            return result
-    except Exception as e:
-        print(f"  ⚠️ 潤飾錯誤: {e}", file=sys.stderr)
+    print(f"  ✨ AI 潤飾中...", file=sys.stderr)
+    result = llm_chat(polish_instructions, max_tokens=2500, timeout=90)
+    if result:
+        result = clean_for_tts(result)
+        print(f"  ✅ 潤飾完成", file=sys.stderr)
+        return result
     return draft
 
 # ==== TTS 文字清理 ====

@@ -12,6 +12,10 @@
   "news_count": 2,
   "voice_max_duration": 300,
   "sources": ["gnews", "newsdata"],
+  "llm_provider": "openai-compatible",
+  "llm_base_url": "https://api.openai.com/v1/chat/completions",
+  "llm_model": "gpt-4o-mini",
+  "llm_api_key": "YOUR_LLM_API_KEY",
   "gnews_api_key": "YOUR_GNEWS_API_KEY",
   "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
   "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
@@ -60,6 +64,16 @@
 | `["newsdata"]` | 只用 NewsData |
 | `["gnews", "newsdata"]` | 同時使用，GNews 為主 |
 
+### llm_provider / llm_base_url / llm_model / llm_api_key
+翻譯與潤飾所用的模型設定（支援客戶自有模型）。
+
+- `llm_provider`: 僅作標記用途（如 `openai-compatible`、`custom`）
+- `llm_base_url`: Chat Completions 端點（OpenAI 相容）
+- `llm_model`: 模型名稱
+- `llm_api_key`: API 金鑰
+
+> 若未填 `llm_api_key`，腳本會嘗試回退到 `~/.openclaw/openclaw.json` 的 OpenAI key。
+
 ## API Key 申請
 
 ### GNews API
@@ -77,8 +91,8 @@
 2. 取得 Bot Token
 3. 取得 Chat ID（傳訊息給 @userinfobot）
 
-### OpenAI API
-放在 `~/.openclaw/openclaw.json`：
+### OpenClaw 預設 Key（可選回退）
+若你沒有在 `config.json` 填 `llm_api_key`，可使用 `~/.openclaw/openclaw.json` 的 OpenAI key 作為回退。
 
 ```json
 {
