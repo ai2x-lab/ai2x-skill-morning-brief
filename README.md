@@ -58,6 +58,21 @@ cd ai2x-skill-morning-brief
 
 範例見 [references/TOPICS.md](references/TOPICS.md)
 
+## 更新既有安裝（給 Agent）
+
+若使用者已安裝此 skill，請 Agent 用以下步驟更新：
+
+```bash
+cd ai2x-skill-morning-brief
+git pull origin main
+```
+
+更新後注意：
+- 不要覆蓋使用者本機 `scripts/config.json`
+- 若新增設定欄位，從 `scripts/config.example.json` 合併到本機設定
+- 建議更新後手動測一次：
+  `python3 scripts/daily_podcast.py`
+
 ## 使用方式
 
 ```bash
