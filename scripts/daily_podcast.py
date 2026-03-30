@@ -66,6 +66,11 @@ config = load_config()
 def is_agent_delegated_mode():
     return (config.get("pipeline_mode") or "self_render").strip() == "agent_delegated"
 
+
+def should_translate_in_core():
+    # Even in agent_delegated mode, translation can stay in core to keep payload readable.
+    return bool(config.get("translate_in_core", True))
+
 # ==== 儲存標題存档 ====
 def save_headlines_for_agent(headlines, date_str):
     MEMORY_DIR.mkdir(parents=True, exist_ok=True)
@@ -276,7 +281,7 @@ def llm_chat(prompt: str, max_tokens: int = 800, timeout: int = 60):
 def translate_to_chinese(text):
     if not text or len(text) < 5:
         return text
-    if is_agent_delegated_mode():
+    if not should_translate_in_core():
         return text
 
     prompt = f"""請將以下英文新聞翻譯成繁體中文，保持新聞風格。
@@ -525,9 +530,11 @@ def generate_script():
 
     draft = f"""Hi {listener_name}，早安！
 
+{today}，星期{weekday}。
+
 今天新店的氣溫是{weather}，記得多穿點出門。
 
-{today}，星期{weekday}，以下是今天的早報："""
+以下是今天的早報："""
 
     topics = config.get("topics", []).copy()
     random.shuffle(topics)
