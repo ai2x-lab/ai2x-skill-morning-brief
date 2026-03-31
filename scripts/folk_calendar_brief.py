@@ -69,10 +69,17 @@ def main():
     if uniq:
         msg = []
         for delta, d, n in uniq:
-            msg.append(f"{target_offsets.get(delta, str(delta)+'天後')}（{d}）{n}")
-        print("節慶提醒（T-3/T-1/當天）：" + "、".join(msg))
+            if delta == 0:
+                msg.append(f"今天（{d}）是{n}")
+            elif delta == 1:
+                msg.append(f"明天（{d}）是{n}")
+            elif delta == 3:
+                msg.append(f"三天後（{d}）是{n}")
+            else:
+                msg.append(f"{target_offsets.get(delta, str(delta)+'天後')}（{d}）{n}")
+        print("節慶提醒：" + "、".join(msg))
     else:
-        print("節慶提醒（T-3/T-1/當天）：無")
+        print("節慶提醒：無")
 
 
 if __name__ == "__main__":
