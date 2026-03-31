@@ -17,6 +17,9 @@
   "llm_base_url": "https://api.openai.com/v1/chat/completions",
   "llm_model": "gpt-4o-mini",
   "llm_api_key": "YOUR_LLM_API_KEY",
+  "tts_timeout_sec": 60,
+  "tts_chunk_chars": 320,
+  "tts_retries": 2,
   "gnews_api_key": "YOUR_GNEWS_API_KEY",
   "newsdata_api_key": "YOUR_NEWSDATA_API_KEY",
   "telegram_bot_token": "YOUR_TELEGRAM_BOT_TOKEN",
@@ -84,6 +87,15 @@
 - `llm_api_key`: API 金鑰
 
 > 若未填 `llm_api_key`，腳本會嘗試回退到 `~/.openclaw/openclaw.json` 的 OpenAI key。
+
+### tts_timeout_sec / tts_chunk_chars / tts_retries
+語音產生穩定性設定（Edge TTS）。
+
+- `tts_timeout_sec`: 單段 TTS timeout 秒數（建議 60）
+- `tts_chunk_chars`: 單段最大字數（建議 280~350）
+- `tts_retries`: 單段重試次數（建議 2）
+
+腳本會在長文時自動分段、重試、合併，避免 timeout 導致整體失敗。
 
 ## API Key 申請
 

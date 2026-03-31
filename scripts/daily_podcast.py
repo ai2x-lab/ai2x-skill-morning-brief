@@ -614,19 +614,162 @@ def generate_script():
     return polished
 
 # ==== 產生語音 ====
+def normalize_tts_text(text: str):
+    text = (text or "").replace("（", "，").replace("）", "，")
+    text = text.replace("「", "").replace("」", "")
+    text = text.replace("\n", " ")
+    text = re.sub(r"[\t\r]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"[。]{2,}", "。", text)
+    return text
+
+
+def split_tts_chunks(text: str, max_chars: int = 320):
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return [text]
+
+    # 優先以段落切，再用句號切，最後硬切
+    chunks = []
+    for para in [p.strip() for p in text.split("\n") if p.strip()]:
+        if len(para) <= max_chars:
+            chunks.append(para)
+            continue
+
+        sentences = re.split(r'(?<=[。！？.!?])\s*', para)
+        buf = ""
+        for s in sentences:
+            if not s:
+                continue
+            if len(buf) + len(s) + 1 <= max_chars:
+                buf = (buf + " " + s).strip()
+            else:
+                if buf:
+                    chunks.append(buf)
+                if len(s) <= max_chars:
+                    buf = s
+                else:
+                    # 句子仍過長時硬切
+                    for i in range(0, len(s), max_chars):
+                        part = s[i:i + max_chars].strip()
+                        if part:
+                            chunks.append(part)
+                    buf = ""
+        if buf:
+            chunks.append(buf)
+
+    return [c for c in chunks if c]
+
+
+def synthesize_edge_tts(text: str, out_file: Path, timeout_sec: int = 60):
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "node",
+        "/home/ubuntu/.npm-global/lib/node_modules/openclaw/node_modules/node-edge-tts/bin.js",
+        "--text", text,
+        "--filepath", str(out_file),
+        "--timeout", str(timeout_sec),
+    ]
+    subprocess.run(cmd, check=True, timeout=timeout_sec + 10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def synthesize_chunk_with_fallback(text: str, out_file: Path, timeout_sec: int, retries: int, depth: int = 0):
+    text = normalize_tts_text(text)
+    if not text:
+        raise RuntimeError("empty tts text")
+
+    for attempt in range(1, retries + 2):
+        try:
+            synthesize_edge_tts(text, out_file, timeout_sec=timeout_sec)
+            if out_file.exists() and out_file.stat().st_size > 1000:
+                return [out_file]
+        except Exception as e:
+            print(f"  ⚠️ TTS 失敗 attempt={attempt} depth={depth}: {e}", file=sys.stderr)
+
+    # 仍失敗就遞迴切小段
+    if depth < 2 and len(text) > 80:
+        mid = len(text) // 2
+        cut = max(text.rfind("。", 0, mid), text.rfind("，", 0, mid), text.rfind(" ", 0, mid))
+        if cut <= 0:
+            cut = mid
+        left = text[:cut].strip()
+        right = text[cut:].strip()
+        parts = []
+        left_file = out_file.with_name(out_file.stem + "_a.mp3")
+        right_file = out_file.with_name(out_file.stem + "_b.mp3")
+        parts += synthesize_chunk_with_fallback(left, left_file, timeout_sec, retries, depth + 1)
+        parts += synthesize_chunk_with_fallback(right, right_file, timeout_sec, retries, depth + 1)
+        return parts
+
+    raise RuntimeError("tts chunk failed after retries and split")
+
+
+def concat_mp3_files(parts, target: Path):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    ffmpeg = subprocess.run(["bash", "-lc", "command -v ffmpeg"], capture_output=True, text=True)
+    if ffmpeg.returncode == 0:
+        list_file = target.parent / f".{target.stem}_parts.txt"
+        with open(list_file, "w", encoding="utf-8") as f:
+            for p in parts:
+                f.write(f"file '{p}'\n")
+        try:
+            subprocess.run([
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+                "-c", "copy", str(target)
+            ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        finally:
+            try:
+                list_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+    else:
+        # fallback: 直接串接（多數播放器可播）
+        with open(target, "wb") as out:
+            for p in parts:
+                with open(p, "rb") as src:
+                    out.write(src.read())
+
+
 def generate_voice(script):
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d")
     mp3_file = MEDIA_DIR / f"daily_{date_str}.mp3"
-    cmd = f'{EDGE_TTS} --text "{script}" --filepath "{mp3_file}"'
-    os.system(cmd + " 2>/dev/null")
+
+    timeout_sec = int(config.get("tts_timeout_sec", 60) or 60)
+    chunk_chars = int(config.get("tts_chunk_chars", 320) or 320)
+    retries = int(config.get("tts_retries", 2) or 2)
+
+    chunks = split_tts_chunks(script, max_chars=chunk_chars)
+    part_files = []
+
+    for idx, chunk in enumerate(chunks, start=1):
+        part = MEDIA_DIR / f"daily_{date_str}_part{idx:03d}.mp3"
+        try:
+            produced = synthesize_chunk_with_fallback(chunk, part, timeout_sec=timeout_sec, retries=retries, depth=0)
+            part_files.extend(produced)
+        except Exception as e:
+            print(f"  ❌ TTS 分段最終失敗 part={idx}: {e}", file=sys.stderr)
+            for p in part_files:
+                p.unlink(missing_ok=True)
+            return None
+
+    try:
+        concat_mp3_files(part_files, mp3_file)
+    except Exception as e:
+        print(f"  ❌ TTS 合併失敗: {e}", file=sys.stderr)
+        for p in part_files:
+            p.unlink(missing_ok=True)
+        return None
+    finally:
+        for p in part_files:
+            p.unlink(missing_ok=True)
 
     if mp3_file.exists() and mp3_file.stat().st_size > 1000:
         print(f"  🎙️ 語音已產生: {mp3_file}", file=sys.stderr)
         return str(mp3_file)
-    else:
-        print(f"  ❌ 語音產生失敗", file=sys.stderr)
-        return None
+
+    print(f"  ❌ 語音產生失敗", file=sys.stderr)
+    return None
 
 # ==== 主程式 ====
 def main():

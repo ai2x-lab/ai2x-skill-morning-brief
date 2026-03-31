@@ -8,7 +8,7 @@
 - 🌤️ Open-Meteo 即時天氣（免費、不需 API Key）
 - 🌐 AI 翻譯成繁體中文
 - ✨ AI 潤飾（自然對話風格，可交由使用者 Agent）
-- 🎙️ 語音輸出（Edge TTS）
+- 🎙️ 語音輸出（Edge TTS，長文自動分段＋重試＋合併）
 - 📤 Telegram 自動推播
 - 📋 標題存档（供 Agent 後續查閱）
 
