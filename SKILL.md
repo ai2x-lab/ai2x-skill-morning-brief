@@ -110,17 +110,23 @@ vim ~/clawd/skills/daily-podcast/scripts/config.json
 
 ## 使用前提醒（重要）
 
-Agent 第一次部署時，請先詢問使用者希望的晨報稱呼，並寫入 `scripts/config.json` 的 `listener_name`。
+Agent 第一次部署時，請先詢問使用者以下三項，再寫入 `scripts/config.json`：
+
+1. 晨報稱呼（`listener_name`）
+2. 所在地點（`location`，用於天氣）
+3. 語系（`locale`，例如 `zh-TW`）
 
 例如：
 
 ```json
 {
-  "listener_name": "阿美姐"
+  "listener_name": "阿美姐",
+  "location": "Xindian,Taiwan",
+  "locale": "zh-TW"
 }
 ```
 
-避免使用固定預設稱呼造成違和感。
+避免使用固定預設稱呼或錯誤地區/語系造成違和感。
 
 ## Agent 更新既有安裝（重要）
 

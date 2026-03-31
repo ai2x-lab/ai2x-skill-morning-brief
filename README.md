@@ -36,10 +36,13 @@ cd ai2x-skill-morning-brief
 詳細步驟請見 [SETUP.md](references/SETUP.md)
 
 快速設定：
-1. **稱呼** - 設定你的名字
-2. **地點** - 設定天氣地點
-3. **主題** - 選擇新聞分類
-4. **API Key** - 填入設定檔
+1. **稱呼** - 設定你的晨報稱呼（listener_name）
+2. **地點** - 設定所在位置（location）
+3. **語系** - 設定語言地區（locale，例如 zh-TW）
+4. **主題** - 選擇新聞分類
+5. **API Key** - 填入設定檔
+
+> 建議 Agent 安裝完成後，第一步先詢問「稱呼 / 地點 / 語系」，再開始執行晨報。
 
 ## 申請 API Key
 

@@ -32,7 +32,21 @@
 
 ---
 
-## 3. 設定主題
+## 3. 設定語系
+
+告訴你的 Agent：
+```
+請幫我設定晨報語系為「zh-TW」
+```
+
+常見值：
+- `zh-TW`（繁體中文）
+- `zh-CN`（簡體中文）
+- `en-US`（英文）
+
+---
+
+## 4. 設定主題
 
 告訴你的 Agent：
 ```
@@ -48,7 +62,7 @@
 
 ---
 
-## 4. 填入 API Key
+## 5. 填入 API Key
 
 編輯 `scripts/config.json`，填入你的 API Key：
 
@@ -63,7 +77,7 @@
 
 ---
 
-## 5. 測試
+## 6. 測試
 
 ```bash
 python3 scripts/daily_podcast.py
@@ -73,7 +87,7 @@ python3 scripts/daily_podcast.py
 
 ---
 
-## 6. 設定每日自動執行
+## 7. 設定每日自動執行
 
 ```bash
 crontab -e
@@ -94,6 +108,7 @@ crontab -e
 請幫我設定晨報：
 - 稱呼：Weichien
 - 地點：新店
+- 語系：zh-TW
 - 主題：國際、科技、軍事
 - 然後幫我申請 GNews API Key
 ```
