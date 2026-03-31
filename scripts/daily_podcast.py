@@ -49,7 +49,7 @@ def load_config():
         "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
         "news_count": 2,
         "sources": ["gnews", "newsdata", "bbc"],
-        "pipeline_mode": "agent_delegated",
+        "pipeline_mode": "self_render",
         "llm_provider": "openai-compatible",
         "llm_base_url": "https://api.openai.com/v1/chat/completions",
         "llm_model": "gpt-4o-mini",
@@ -96,18 +96,19 @@ def save_brief_payload(payload, date_str):
         json.dump(payload, f, ensure_ascii=False, indent=2)
     print(f"  📦 payload 已存: {payload_file}", file=sys.stderr)
 
-    render_input_file = PODCAST_DIR / f"render_input_{date_str.replace('-', '')}.md"
-    lines = [
-        f"# Morning Brief Render Input - {date_str}",
-        "",
-        "請使用本資料進行翻譯與潤飾，產生適合使用者語氣的最終晨報稿。",
-        "",
-        "## 摘要資料",
-        json.dumps(payload, ensure_ascii=False, indent=2),
-    ]
-    with open(render_input_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-    print(f"  🧩 render input 已存: {render_input_file}", file=sys.stderr)
+    if is_agent_delegated_mode():
+        render_input_file = PODCAST_DIR / f"render_input_{date_str.replace('-', '')}.md"
+        lines = [
+            f"# Morning Brief Render Input - {date_str}",
+            "",
+            "請使用本資料進行翻譯與潤飾，產生適合使用者語氣的最終晨報稿。",
+            "",
+            "## 摘要資料",
+            json.dumps(payload, ensure_ascii=False, indent=2),
+        ]
+        with open(render_input_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        print(f"  🧩 render input 已存: {render_input_file}", file=sys.stderr)
 
 # ==== Telegram ====
 def send_to_telegram(mp3_file, caption=""):

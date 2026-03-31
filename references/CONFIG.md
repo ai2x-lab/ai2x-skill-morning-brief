@@ -12,7 +12,7 @@
   "news_count": 2,
   "voice_max_duration": 300,
   "sources": ["gnews", "newsdata"],
-  "pipeline_mode": "agent_delegated",
+  "pipeline_mode": "self_render",
   "llm_provider": "openai-compatible",
   "llm_base_url": "https://api.openai.com/v1/chat/completions",
   "llm_model": "gpt-4o-mini",
@@ -67,7 +67,8 @@
 | `agent_delegated` | 只做資料彙整與初稿，翻譯/潤飾交給使用者 Agent |
 | `self_render` | 由本 skill 直接完成翻譯與潤飾 |
 
-> 建議預設使用 `agent_delegated`，可讓客戶用自己的模型與語氣。
+> 一般使用建議預設 `self_render`（最直覺，不依賴其他 agent）。
+> 若要把潤飾交給客戶自己的 agent，再改成 `agent_delegated`。
 
 ### sources
 使用的新聞來源。
