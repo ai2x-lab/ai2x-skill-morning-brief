@@ -4,9 +4,12 @@ import xml.etree.ElementTree as ET
 
 
 def fetch_rss(feed_url: str, provider: str, max_items: int = 3) -> list[dict]:
-    r = requests.get(feed_url, timeout=15)
-    r.raise_for_status()
-    root = ET.fromstring(r.text)
+    try:
+        r = requests.get(feed_url, timeout=15)
+        r.raise_for_status()
+        root = ET.fromstring(r.text)
+    except Exception:
+        return []
     items = []
     for item in root.findall('.//item')[:max_items]:
         title = (item.findtext('title') or '').strip()
