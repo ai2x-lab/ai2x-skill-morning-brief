@@ -16,9 +16,10 @@ class RunResult:
     mode_used: str
     fallback_used: bool
     audio_path: str
+    packet_path: str
 
 
-def build_agent_instruction(cfg: dict[str, Any], draft: str) -> str:
+def build_agent_instruction(cfg: dict[str, Any], draft: str, packet: dict[str, Any]) -> str:
     tpl = cfg.get("render", {}).get("agent_instruction_template", "")
     values = {
         "listener_name": cfg.get("profile", {}).get("listener_name", "朋友"),
@@ -29,11 +30,12 @@ def build_agent_instruction(cfg: dict[str, Any], draft: str) -> str:
         head = tpl.format(**values)
     except Exception:
         head = tpl
-    return f"{head}\n\n【晨報草稿】\n{draft}"
+    import json
+    return f"{head}\n\n【晨報草稿】\n{draft}\n\n【素材包(JSON)】\n{json.dumps(packet, ensure_ascii=False)}"
 
 
-def render_with_agent(cfg: dict[str, Any], draft: str) -> str:
-    return render_via_gateway(build_agent_instruction(cfg, draft))
+def render_with_agent(cfg: dict[str, Any], draft: str, packet: dict[str, Any]) -> str:
+    return render_via_gateway(build_agent_instruction(cfg, draft, packet))
 
 
 def render_with_self(cfg: dict[str, Any], draft: str) -> str:
@@ -41,7 +43,11 @@ def render_with_self(cfg: dict[str, Any], draft: str) -> str:
 
 
 def run_pipeline(cfg: dict[str, Any], gnews_key: str, media_dir: str = "/home/ubuntu/.openclaw/media", deliver: bool = True) -> RunResult:
-    draft = build_draft(cfg, gnews_key=gnews_key)
+    secrets = {
+        "gnews_api_key": gnews_key,
+        "newsdata_api_key": __import__('os').getenv("MORNING_BRIEF_NEWSDATA_API_KEY", ""),
+    }
+    draft, packet = build_draft(cfg, secrets=secrets)
     mode = cfg.get("render", {}).get("mode", "agent")
     fallback = cfg.get("render", {}).get("fallback_mode", "self")
 
@@ -51,7 +57,7 @@ def run_pipeline(cfg: dict[str, Any], gnews_key: str, media_dir: str = "/home/ub
         mode_used = "self"
     else:
         try:
-            final_text = render_with_agent(cfg, draft)
+            final_text = render_with_agent(cfg, draft, packet)
             mode_used = "agent"
         except Exception:
             if fallback != "self":
@@ -62,6 +68,8 @@ def run_pipeline(cfg: dict[str, Any], gnews_key: str, media_dir: str = "/home/ub
 
     date_tag = datetime.now().strftime("%Y%m%d")
     out = Path(media_dir) / f"daily_v2_{date_tag}.mp3"
+    packet_path = Path(media_dir) / f"daily_v2_{date_tag}.packet.json"
+    packet_path.write_text(__import__('json').dumps(packet, ensure_ascii=False, indent=2), encoding='utf-8')
     voice = cfg.get("voice", {})
     synthesize(
         final_text,
@@ -79,4 +87,4 @@ def run_pipeline(cfg: dict[str, Any], gnews_key: str, media_dir: str = "/home/ub
         caption = f"🎙️ {datetime.now().strftime('%Y/%m/%d')} 晨間摘要 v2"
         send_telegram_audio(chat_id, out, caption=caption)
 
-    return RunResult(mode_used=mode_used, fallback_used=fallback_used, audio_path=str(out))
+    return RunResult(mode_used=mode_used, fallback_used=fallback_used, audio_path=str(out), packet_path=str(packet_path))

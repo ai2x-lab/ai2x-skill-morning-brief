@@ -44,7 +44,8 @@
       "required": [
         "topics",
         "news_count",
-        "sources"
+        "sources",
+        "enabled_sources"
       ],
       "properties": {
         "topics": {
@@ -79,6 +80,42 @@
               "bbc"
             ]
           }
+        },
+        "enabled_sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "gnews",
+              "newsdata",
+              "bbc",
+              "reuters",
+              "ap"
+            ]
+          },
+          "default": [
+            "gnews",
+            "newsdata",
+            "bbc"
+          ]
+        },
+        "max_candidates_per_source": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "max_candidates_per_topic": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 8
+        },
+        "min_quality_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 1.0
         }
       },
       "additionalProperties": false

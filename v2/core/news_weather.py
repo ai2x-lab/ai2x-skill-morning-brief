@@ -2,6 +2,8 @@ from __future__ import annotations
 import random
 import requests
 
+from .news_aggregator import collect_topic_candidates
+
 CITY_COORDS = {
     "Xindian": {"lat": 24.9673, "lon": 121.5416},
     "Taipei": {"lat": 25.0330, "lon": 121.5654},
@@ -35,27 +37,11 @@ def get_weather(location: str) -> str:
     return f"{t}度，{w}"
 
 
-def fetch_gnews(query: str, api_key: str, max_items: int = 2) -> list[dict]:
-    if not api_key:
-        return []
-    r = requests.get(
-        "https://gnews.io/api/v4/search",
-        params={"q": query, "lang": "en", "max": max_items, "apikey": api_key},
-        timeout=15,
-    )
-    r.raise_for_status()
-    out = []
-    for a in r.json().get("articles", [])[:max_items]:
-        out.append({"title": a.get("title", ""), "summary": a.get("description", ""), "source": a.get("source", {}).get("name", "")})
-    return out
-
-
-def build_draft(cfg: dict, gnews_key: str) -> str:
+def build_draft(cfg: dict, secrets: dict) -> tuple[str, dict]:
     profile = cfg.get("profile", {})
     content = cfg.get("content", {})
     topics = content.get("topics", [])[:]
     random.shuffle(topics)
-    news_count = int(content.get("news_count", 2))
 
     weather = get_weather(profile.get("location", "Xindian,Taiwan"))
     lines = [
@@ -64,15 +50,17 @@ def build_draft(cfg: dict, gnews_key: str) -> str:
         "以下是今日晨報重點：",
     ]
 
+    packet = {"weather": weather, "topics": []}
     for label, q in topics[:5]:
-        items = fetch_gnews(q, gnews_key, max_items=news_count)
+        items = collect_topic_candidates(label, q, cfg, secrets)
         if not items:
             continue
+        packet["topics"].append({"label": label, "query": q, "candidates": items})
         lines.append(f"【{label}】")
-        for i, it in enumerate(items, 1):
+        for i, it in enumerate(items[: int(content.get('news_count', 2))], 1):
             title = (it.get("title") or "").strip()
             summary = (it.get("summary") or "").strip()
             lines.append(f"{i}. {title}。{summary}")
 
     lines.append("以上是今天晨報，祝你今天順利。")
-    return "\n".join(lines)
+    return "\n".join(lines), packet

@@ -16,3 +16,4 @@
 - Decouples model/API key from skill
 - Keeps output style controllable via configure
 - Preserves deterministic fallback when agent is unavailable
+- Supports richer multi-source candidate packet for agent-level selection

@@ -27,6 +27,7 @@ def main():
         "mode_used": res.mode_used,
         "fallback_used": res.fallback_used,
         "audio_path": res.audio_path,
+        "packet_path": res.packet_path,
         "delivery_mode": cfg.get("delivery", {}).get("mode", "none"),
         "dry_run": args.dry_run
     }, ensure_ascii=False, indent=2))
