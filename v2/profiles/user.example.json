@@ -6,9 +6,21 @@
     "locale": "zh-TW"
   },
   "content": {
-    "topics": [["國際", "world news"], ["科技", "AI technology"]],
+    "topics": [
+      [
+        "國際",
+        "world news"
+      ],
+      [
+        "科技",
+        "AI technology"
+      ]
+    ],
     "news_count": 3,
-    "sources": ["gnews", "bbc"]
+    "sources": [
+      "gnews",
+      "bbc"
+    ]
   },
   "style": {
     "tone": "warm_story",
@@ -26,5 +38,10 @@
     "channel": "telegram",
     "telegram_chat_id": "6004789102"
   },
-  "extensions": {}
+  "extensions": {},
+  "render": {
+    "mode": "agent",
+    "fallback_mode": "self",
+    "agent_instruction_template": "請根據以下設定與草稿，產出可直接口播的晨報成稿。稱謂:{listener_name}；語氣:{tone}；目標秒數:{duration_sec}。"
+  }
 }

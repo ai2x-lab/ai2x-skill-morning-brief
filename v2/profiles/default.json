@@ -7,14 +7,33 @@
   },
   "content": {
     "topics": [
-      ["國際", "world news"],
-      ["經濟", "economy market"],
-      ["科技", "AI technology"],
-      ["軍事", "military war"],
-      ["能源", "oil energy"]
+      [
+        "國際",
+        "world news"
+      ],
+      [
+        "經濟",
+        "economy market"
+      ],
+      [
+        "科技",
+        "AI technology"
+      ],
+      [
+        "軍事",
+        "military war"
+      ],
+      [
+        "能源",
+        "oil energy"
+      ]
     ],
     "news_count": 2,
-    "sources": ["gnews", "newsdata", "bbc"]
+    "sources": [
+      "gnews",
+      "newsdata",
+      "bbc"
+    ]
   },
   "style": {
     "tone": "warm_concise",
@@ -32,5 +51,10 @@
     "channel": "telegram",
     "telegram_chat_id": "YOUR_CHAT_ID"
   },
-  "extensions": {}
+  "extensions": {},
+  "render": {
+    "mode": "agent",
+    "fallback_mode": "self",
+    "agent_instruction_template": "請根據以下設定與草稿，產出可直接口播的晨報成稿。稱謂:{listener_name}；語氣:{tone}；目標秒數:{duration_sec}。"
+  }
 }
