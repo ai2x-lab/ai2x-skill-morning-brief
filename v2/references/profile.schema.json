@@ -149,19 +149,19 @@
     "delivery": {
       "type": "object",
       "required": [
-        "channel",
-        "telegram_chat_id"
+        "mode"
       ],
       "properties": {
-        "channel": {
+        "mode": {
           "type": "string",
           "enum": [
+            "none",
             "telegram"
-          ]
+          ],
+          "default": "none"
         },
         "telegram_chat_id": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
         }
       },
       "additionalProperties": false

@@ -35,8 +35,7 @@
     "pitch": "+0Hz"
   },
   "delivery": {
-    "channel": "telegram",
-    "telegram_chat_id": "6004789102"
+    "mode": "none"
   },
   "extensions": {},
   "render": {

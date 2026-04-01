@@ -9,9 +9,11 @@
 - 風格：`style.*`
 - 時長：`voice.duration_sec`
 - 男女聲：`voice.gender` + `voice.tts_voice`
+- 交付模式：`delivery.mode`（預設 `none`，可選 `telegram`）
 
 > 發報時間不放在 skill configure。
 > 排程由客戶自行用 cron/systemd 管理（符合你的原則）。
+> skill 預設不綁 channel id，讓不同平台可共用。
 
 ## 設計原則
 1. Core 與 Configure 分離

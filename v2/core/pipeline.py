@@ -71,8 +71,12 @@ def run_pipeline(cfg: dict[str, Any], gnews_key: str, media_dir: str = "/home/ub
         pitch=voice.get("pitch", "+0Hz"),
     )
 
-    if deliver and cfg.get("delivery", {}).get("channel") == "telegram":
+    delivery = cfg.get("delivery", {})
+    if deliver and delivery.get("mode") == "telegram":
+        chat_id = delivery.get("telegram_chat_id")
+        if not chat_id:
+            raise RuntimeError("delivery.mode=telegram but telegram_chat_id is missing")
         caption = f"🎙️ {datetime.now().strftime('%Y/%m/%d')} 晨間摘要 v2"
-        send_telegram_audio(cfg["delivery"]["telegram_chat_id"], out, caption=caption)
+        send_telegram_audio(chat_id, out, caption=caption)
 
     return RunResult(mode_used=mode_used, fallback_used=fallback_used, audio_path=str(out))

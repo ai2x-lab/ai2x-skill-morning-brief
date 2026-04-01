@@ -22,7 +22,14 @@ def main():
     cfg = load_profile()
     gnews_key = os.getenv("MORNING_BRIEF_GNEWS_API_KEY", "")
     res = run_pipeline(cfg, gnews_key=gnews_key, deliver=not args.dry_run)
-    print(json.dumps({"ok": True, "mode_used": res.mode_used, "fallback_used": res.fallback_used, "audio_path": res.audio_path, "dry_run": args.dry_run}, ensure_ascii=False, indent=2))
+    print(json.dumps({
+        "ok": True,
+        "mode_used": res.mode_used,
+        "fallback_used": res.fallback_used,
+        "audio_path": res.audio_path,
+        "delivery_mode": cfg.get("delivery", {}).get("mode", "none"),
+        "dry_run": args.dry_run
+    }, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
