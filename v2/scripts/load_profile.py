@@ -30,6 +30,14 @@ def load_profile():
     if chat_id:
         merged.setdefault("delivery", {})["telegram_chat_id"] = chat_id
 
+    name = os.getenv("MORNING_BRIEF_LISTENER_NAME")
+    if name:
+        merged.setdefault("profile", {})["listener_name"] = name
+
+    voice = os.getenv("MORNING_BRIEF_TTS_VOICE")
+    if voice:
+        merged.setdefault("voice", {})["tts_voice"] = voice
+
     return merged
 
 
