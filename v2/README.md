@@ -1,18 +1,25 @@
-# Morning Brief v2 (Core/Profile Split)
+# Morning Brief v2 (Development)
 
-這是 v2 架構（開發中），目標：
-- 核心流程可穩定更新（Core）
-- 使用者客製不被覆蓋（Profile）
-- 升級有版本與遷移（Schema + Migration）
+目標：最高可發展性，明確分離「可客製」與「核心流程」。
+
+## v2 configure 欄位（可客製）
+- 稱謂：`profile.listener_name`
+- 地點：`profile.location`
+- topic：`content.topics`
+- 風格：`style.*`
+- 時長：`voice.duration_sec`
+- 男女聲：`voice.gender` + `voice.tts_voice`
+
+> 發報時間不放在 skill configure。
+> 排程由客戶自行用 cron/systemd 管理（符合你的原則）。
 
 ## 設計原則
-1. Core 與 Profile 分離
-2. Profile 版本化（`profile_version`）
-3. Schema 驗證（允許 extensions）
-4. 更新只覆蓋 Core，保留 `profiles/user.json`
+1. Core 與 Configure 分離
+2. Agent 只調整 `profiles/user.json`
+3. 更新核心時不可覆蓋 `profiles/user.json`
+4. 預留 `extensions` 以便未來擴展
 
-## 避坑清單（已踩過）
-- 不把長文本直接塞進 shell command（避免 TTS 截斷）
-- 不依賴單機寫死路徑（`/home/...`）
-- 不把 token 硬寫在 repo 追蹤檔
-- 不讓 agent 任意改 core 檔案
+## 避坑
+- 避免本機寫死路徑
+- 避免把 token 寫進 git 追蹤檔
+- 避免 long text 一次塞 shell 造成 TTS 截斷

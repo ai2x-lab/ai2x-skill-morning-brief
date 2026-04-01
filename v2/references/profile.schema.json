@@ -1,29 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Morning Brief v2 Profile",
+  "title": "Morning Brief v2 Configure Schema",
   "type": "object",
-  "required": ["profile_version", "identity", "delivery", "content", "style"],
+  "required": ["config_version", "profile", "content", "style", "voice", "delivery"],
   "properties": {
-    "profile_version": {"type": "string", "pattern": "^2\\.[0-9]+\\.[0-9]+$"},
-    "identity": {
+    "config_version": { "type": "string", "pattern": "^2\\.[0-9]+\\.[0-9]+$" },
+    "profile": {
       "type": "object",
-      "required": ["listener_name", "locale", "location"],
+      "required": ["listener_name", "location", "locale"],
       "properties": {
-        "listener_name": {"type": "string", "minLength": 1},
-        "locale": {"type": "string", "default": "zh-TW"},
-        "location": {"type": "string", "minLength": 1}
+        "listener_name": { "type": "string", "minLength": 1 },
+        "location": { "type": "string", "minLength": 1 },
+        "locale": { "type": "string", "default": "zh-TW" }
       },
       "additionalProperties": false
-    },
-    "delivery": {
-      "type": "object",
-      "required": ["channel", "voice_max_duration"],
-      "properties": {
-        "channel": {"type": "string", "enum": ["telegram"]},
-        "voice_max_duration": {"type": "integer", "minimum": 60, "maximum": 900, "default": 300},
-        "telegram_chat_id": {"type": "string"}
-      },
-      "additionalProperties": true
     },
     "content": {
       "type": "object",
@@ -35,25 +25,46 @@
             "type": "array",
             "minItems": 2,
             "maxItems": 2,
-            "items": [{"type": "string"}, {"type": "string"}]
+            "items": [{ "type": "string" }, { "type": "string" }]
           }
         },
-        "news_count": {"type": "integer", "minimum": 1, "maximum": 6, "default": 2},
-        "sources": {"type": "array", "items": {"type": "string"}}
+        "news_count": { "type": "integer", "minimum": 1, "maximum": 8, "default": 2 },
+        "sources": { "type": "array", "items": { "type": "string", "enum": ["gnews", "newsdata", "bbc"] } }
       },
-      "additionalProperties": true
+      "additionalProperties": false
     },
     "style": {
       "type": "object",
       "required": ["tone", "opening_template", "closing_template"],
       "properties": {
-        "tone": {"type": "string", "default": "warm_concise"},
-        "opening_template": {"type": "string"},
-        "closing_template": {"type": "string"}
+        "tone": { "type": "string", "enum": ["warm_concise", "warm_story", "formal_brief"], "default": "warm_concise" },
+        "opening_template": { "type": "string" },
+        "closing_template": { "type": "string" }
       },
       "additionalProperties": true
     },
-    "extensions": {"type": "object"}
+    "voice": {
+      "type": "object",
+      "required": ["duration_sec", "gender", "tts_voice"],
+      "properties": {
+        "duration_sec": { "type": "integer", "minimum": 60, "maximum": 900, "default": 300 },
+        "gender": { "type": "string", "enum": ["female", "male"], "default": "female" },
+        "tts_voice": { "type": "string", "default": "zh-TW-HsiaoChenNeural" },
+        "rate": { "type": "string", "default": "+0%" },
+        "pitch": { "type": "string", "default": "+0Hz" }
+      },
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "required": ["channel", "telegram_chat_id"],
+      "properties": {
+        "channel": { "type": "string", "enum": ["telegram"] },
+        "telegram_chat_id": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "extensions": { "type": "object", "default": {} }
   },
   "additionalProperties": false
 }

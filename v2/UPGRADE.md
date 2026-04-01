@@ -1,11 +1,9 @@
-# Upgrade path
+# v2 Strategy
 
-## v1 -> v2
-1. Keep running v1 in production
-2. Run `python3 v2/migrations/migrate_v1_to_v2.py`
-3. Review `v2/profiles/user.json`
-4. Switch runner to v2 when ready
+- v2 以可發展性優先，不強調與 v1 長期相容。
+- 現階段測試量低，可接受結構重整。
+- 客製配置固定在 `v2/profiles/user.json`，核心更新不覆蓋此檔。
 
-## Non-overwrite rule
-- Do NOT overwrite: `v2/profiles/user.json`
-- Safe to overwrite: `v2/core/*`, `v2/scripts/*`, `v2/references/*`
+## 排程原則
+- 發報時間由客戶自行 cron 設定
+- skill 只負責內容生成與發送
