@@ -1,0 +1,23 @@
+{
+  "profile_version": "2.0.0",
+  "identity": {
+    "listener_name": "朋友",
+    "locale": "zh-TW",
+    "location": "Xindian,Taiwan"
+  },
+  "delivery": {
+    "channel": "telegram",
+    "voice_max_duration": 300
+  },
+  "content": {
+    "topics": [["國際", "world news"], ["經濟", "economy market"], ["科技", "AI technology"], ["軍事", "military war"], ["能源", "oil energy"]],
+    "news_count": 2,
+    "sources": ["gnews", "newsdata", "bbc"]
+  },
+  "style": {
+    "tone": "warm_concise",
+    "opening_template": "早安 {listener_name}，今天 {location} 天氣 {weather}。以下是今日重點。",
+    "closing_template": "以上是今天晨報，祝你今天順利。"
+  },
+  "extensions": {}
+}

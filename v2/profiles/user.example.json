@@ -1,0 +1,24 @@
+{
+  "profile_version": "2.0.0",
+  "identity": {
+    "listener_name": "Weichien",
+    "locale": "zh-TW",
+    "location": "Xindian,Taiwan"
+  },
+  "delivery": {
+    "channel": "telegram",
+    "voice_max_duration": 300,
+    "telegram_chat_id": "YOUR_CHAT_ID"
+  },
+  "content": {
+    "topics": [["國際", "world news"], ["科技", "AI technology"]],
+    "news_count": 2,
+    "sources": ["gnews", "bbc"]
+  },
+  "style": {
+    "tone": "warm_concise",
+    "opening_template": "早安 {listener_name}，今天 {location} 天氣 {weather}。以下是今日重點。",
+    "closing_template": "以上是今天晨報，祝你今天順利。"
+  },
+  "extensions": {}
+}

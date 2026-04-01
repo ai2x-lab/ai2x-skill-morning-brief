@@ -1,2 +1,6 @@
 scripts/config.json
 .env
+
+# v2 profile local overrides
+v2/profiles/user.json
+v2/profiles/secrets.local.json

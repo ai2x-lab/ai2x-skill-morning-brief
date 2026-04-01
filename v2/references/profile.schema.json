@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Morning Brief v2 Profile",
+  "type": "object",
+  "required": ["profile_version", "identity", "delivery", "content", "style"],
+  "properties": {
+    "profile_version": {"type": "string", "pattern": "^2\\.[0-9]+\\.[0-9]+$"},
+    "identity": {
+      "type": "object",
+      "required": ["listener_name", "locale", "location"],
+      "properties": {
+        "listener_name": {"type": "string", "minLength": 1},
+        "locale": {"type": "string", "default": "zh-TW"},
+        "location": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "required": ["channel", "voice_max_duration"],
+      "properties": {
+        "channel": {"type": "string", "enum": ["telegram"]},
+        "voice_max_duration": {"type": "integer", "minimum": 60, "maximum": 900, "default": 300},
+        "telegram_chat_id": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "content": {
+      "type": "object",
+      "required": ["topics", "news_count", "sources"],
+      "properties": {
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": [{"type": "string"}, {"type": "string"}]
+          }
+        },
+        "news_count": {"type": "integer", "minimum": 1, "maximum": 6, "default": 2},
+        "sources": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": true
+    },
+    "style": {
+      "type": "object",
+      "required": ["tone", "opening_template", "closing_template"],
+      "properties": {
+        "tone": {"type": "string", "default": "warm_concise"},
+        "opening_template": {"type": "string"},
+        "closing_template": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "extensions": {"type": "object"}
+  },
+  "additionalProperties": false
+}
