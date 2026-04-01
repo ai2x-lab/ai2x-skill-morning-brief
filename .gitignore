@@ -4,3 +4,7 @@ scripts/config.json
 # v2 profile local overrides
 v2/profiles/user.json
 v2/profiles/secrets.local.json
+
+# python cache
+__pycache__/
+*.pyc
