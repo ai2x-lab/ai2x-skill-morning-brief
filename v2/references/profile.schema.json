@@ -116,6 +116,43 @@
           "minimum": 0,
           "maximum": 5,
           "default": 1.0
+        },
+        "source_priority": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          },
+          "default": {
+            "gnews": 1.0,
+            "newsdata": 0.9,
+            "bbc": 1.1,
+            "reuters": 1.2,
+            "ap": 1.15
+          }
+        },
+        "topic_source_whitelist": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "gnews",
+                "newsdata",
+                "bbc",
+                "reuters",
+                "ap"
+              ]
+            }
+          },
+          "default": {}
+        },
+        "topic_blacklist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
         }
       },
       "additionalProperties": false

@@ -15,14 +15,14 @@ def _norm_key(item: dict) -> str:
     return f"{t}|{u[:120]}"
 
 
-def _score(item: dict) -> float:
+def _score(item: dict, source_weight: float = 1.0) -> float:
     score = 0.0
     if item.get("title"): score += 1.0
     if item.get("summary"): score += 0.6
     if item.get("snippet"): score += 0.4
     if item.get("url"): score += 0.3
     if item.get("published_at"): score += 0.2
-    return score
+    return score * source_weight
 
 
 def collect_topic_candidates(topic_label: str, query: str, cfg: dict[str, Any], secrets: dict[str, str]) -> list[dict]:
@@ -30,6 +30,12 @@ def collect_topic_candidates(topic_label: str, query: str, cfg: dict[str, Any], 
     enabled = content.get("enabled_sources", ["gnews", "newsdata", "bbc"])
     per_source = int(content.get("max_candidates_per_source", 3))
     min_score = float(content.get("min_quality_score", 1.0))
+    weights = content.get("source_priority", {}) or {}
+
+    # topic-level source whitelist
+    topic_whitelist = (content.get("topic_source_whitelist", {}) or {}).get(topic_label, [])
+    if topic_whitelist:
+        enabled = [s for s in enabled if s in topic_whitelist]
 
     raw = []
     if "gnews" in enabled:
@@ -44,7 +50,7 @@ def collect_topic_candidates(topic_label: str, query: str, cfg: dict[str, Any], 
             except Exception:
                 pass
 
-    # dedupe
+    # dedupe + score with source weight
     seen = set()
     out = []
     for item in raw:
@@ -53,7 +59,9 @@ def collect_topic_candidates(topic_label: str, query: str, cfg: dict[str, Any], 
             continue
         seen.add(k)
         item["topic_tag"] = topic_label
-        item["quality_score"] = _score(item)
+        provider = item.get("provider", "")
+        w = float(weights.get(provider, 1.0))
+        item["quality_score"] = _score(item, source_weight=w)
         if item["quality_score"] >= min_score:
             out.append(item)
 

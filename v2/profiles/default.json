@@ -41,7 +41,16 @@
     ],
     "max_candidates_per_source": 3,
     "max_candidates_per_topic": 8,
-    "min_quality_score": 1.0
+    "min_quality_score": 1.0,
+    "source_priority": {
+      "gnews": 1.0,
+      "newsdata": 0.9,
+      "bbc": 1.1,
+      "reuters": 1.2,
+      "ap": 1.15
+    },
+    "topic_source_whitelist": {},
+    "topic_blacklist": []
   },
   "style": {
     "tone": "warm_concise",

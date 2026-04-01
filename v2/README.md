@@ -11,6 +11,9 @@
 - 男女聲：`voice.gender` + `voice.tts_voice`
 - 交付模式：`delivery.mode`（預設 `none`，可選 `telegram`）
 - 新聞來源策略：`content.enabled_sources`、`max_candidates_per_source`、`max_candidates_per_topic`、`min_quality_score`
+- 來源權重：`content.source_priority`
+- topic 白名單來源：`content.topic_source_whitelist`
+- 議題黑名單：`content.topic_blacklist`（讓 agent 避開不想用的議題）
 
 > 發報時間不放在 skill configure。
 > 排程由客戶自行用 cron/systemd 管理（符合你的原則）。

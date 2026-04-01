@@ -43,6 +43,19 @@ def build_draft(cfg: dict, secrets: dict) -> tuple[str, dict]:
     topics = content.get("topics", [])[:]
     random.shuffle(topics)
 
+    # topic blacklist: skip topics containing blacklist keywords
+    blacklist = [x.strip().lower() for x in content.get("topic_blacklist", []) if str(x).strip()]
+    if blacklist:
+        filtered = []
+        for t in topics:
+            label = (t[0] if len(t) > 0 else "").lower()
+            query = (t[1] if len(t) > 1 else "").lower()
+            txt = f"{label} {query}"
+            if any(b in txt for b in blacklist):
+                continue
+            filtered.append(t)
+        topics = filtered
+
     weather = get_weather(profile.get("location", "Xindian,Taiwan"))
     lines = [
         f"早安 {profile.get('listener_name','朋友')}，",
