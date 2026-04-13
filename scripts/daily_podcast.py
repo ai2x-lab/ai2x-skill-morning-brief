@@ -144,38 +144,36 @@ def get_weather(location=None):
             "latitude": coords["lat"],
             "longitude": coords["lon"],
             "current_weather": True,
-            "hourly": "relativehumidity_2m",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
             "timezone": "Asia/Taipei"
         }
         resp = requests.get(url, params=params, timeout=10)
         data = resp.json()
 
         current = data.get("current_weather", {})
-        temp = float(current.get("temperature", 0))
-        windspeed = float(current.get("windspeed", 0))
+        windspeed = round(float(current.get("windspeed", 0)))
         weathercode = int(current.get("weathercode", 0))
-
-        # 解析天氣代碼
         weather_desc = weathercode_to_description(weathercode)
 
-        # 取得濕度
-        hourly = data.get("hourly", {})
-        humidity_data = hourly.get("relativehumidity_2m", []) if hourly else []
-        humidity = humidity_data[0] if humidity_data else None
+        # 每日預報（今天 index=0）
+        daily = data.get("daily", {})
+        times = daily.get("time", [])
+        max_temps = daily.get("temperature_2m_max", [])
+        min_temps = daily.get("temperature_2m_min", [])
+        precip_probs = daily.get("precipitation_probability_max", [])
 
-        # 四捨五入
-        temp_rounded = round(temp)
-        windspeed_rounded = round(windspeed)
+        temp_max = round(max_temps[0]) if max_temps else "?"
+        temp_min = round(min_temps[0]) if min_temps else "?"
+        precip_prob = precip_probs[0] if precip_probs else 0
 
-        result = f"{temp_rounded}度，{weather_desc}，風速{windspeed_rounded}公里"
-        if humidity is not None:
-            result += f"，濕度{round(humidity)}%"
+        summary = f"高溫{temp_max}度，低溫{temp_min}度，{weather_desc}，風速{windspeed}公里"
+        rain_reminder = f"降雨機率約{precip_prob}%，記得帶雨具！" if precip_prob >= 20 else None
 
-        return result
+        return summary, rain_reminder
 
     except Exception as e:
         print(f"  ⚠️ 天氣取得失敗: {e}", file=sys.stderr)
-        return "天氣資訊取得失敗"
+        return "天氣資訊取得失敗", None
 
 def weathercode_to_description(code):
     """將 Open-Meteo 天氣碼轉換成中文描述"""
@@ -523,17 +521,18 @@ def generate_script():
     today = datetime.now().strftime("%Y年 %m月 %d日")
     date_str = datetime.now().strftime("%Y-%m-%d")
     weekday = ["一", "二", "三", "四", "五", "六", "日"][datetime.now().weekday()]
-    weather = get_weather()
+    weather_summary, rain_reminder = get_weather()
 
     folk_calendar = get_folk_calendar_brief()
 
     listener_name = (config.get("listener_name") or "朋友").strip()
+    reminder_line = f"\n{rain_reminder}" if rain_reminder else ""
 
     draft = f"""Hi {listener_name}，早安！
 
 {today}，星期{weekday}。
 
-今天新店的氣溫是{weather}，記得多穿點出門。
+今天新店{weather_summary}，出門注意身體。{reminder_line}
 
 以下是今天的早報："""
 
